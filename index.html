@@ -15,7 +15,7 @@
   }
   * { box-sizing: border-box; }
   html, body { height: 100%; background: var(--bg); color: var(--ink); font-family: system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif; }
-  body { margin: 0; display: grid; grid-template-columns: 320px 1fr; gap: 0; }
+  body { margin: 0; display: grid; grid-template-columns: 320px 1fr; gap: 0; min-height: 100vh; }
   aside {
     background: var(--panel);
     border-right: 1px solid #1f2630;
@@ -107,20 +107,42 @@
     display: none;
   }
   .toast.show { display: block; }
+  @media (max-width: 900px) {
+    body {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto auto;
+    }
+    main {
+      order: 1;
+    }
+    aside {
+      order: 2;
+      border-right: none;
+      border-top: 1px solid #1f2630;
+    }
+    canvas {
+      width: 100%;
+    }
+  }
+  @media (max-width: 600px) {
+    .btns, .touch-actions { grid-template-columns: 1fr; }
+    .touch-controls { margin-top: 8px; }
+  }
 </style>
 </head>
 <body>
   <aside>
-    <h1>Adventure‑like</h1>
+    <h1 id="gameTitle">Kid Adventure</h1>
     <div class="row tips">
-      Carry a single item at a time. Take the <b>trophy</b> back to the start room’s pedestal to win.
+      Carry one item at a time. Grab the <b>sword</b> to fight the dragon, pick up the <b>key</b> to unlock castle gates, and return the <b>trophy</b> to the start pedestal to win.
     </div>
-    <h2>Kid art folders</h2>
+    <h2>How to Play</h2>
     <div class="row tips">
-      Drop PNGs/JPGs into <code>assets/kids/&lt;kidId&gt;/</code> named
-      <code>player.png</code>, <code>dragon.png</code>, <code>key.png</code>,
-      <code>sword.png</code>, <code>trophy.png</code>. Update the manifest in the
-      script (or use <code>?kid=eli</code>) to point at the right folder.
+      <b>1.</b> Explore to find the sword near the meadow.<br>
+      <b>2.</b> Hunt down the dragon (sword defeats it).<br>
+      <b>3.</b> Carry the key into castle gates to swing them open—no extra button press needed.<br>
+      <b>4.</b> Snag the trophy from the depths and bring it home.<br>
+      Gates, dragons, and treasures move around depending on the level you pick.
     </div>
 
     <div class="row">
@@ -220,6 +242,27 @@ function heldDirection(dir) {
 }
 
 function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+function resolveItemGateOverlap(item, room, player) {
+  if (!room.gate || room.gate.open) return;
+  const g = room.gate.rect;
+  if (!rectsOverlap(item, g)) return;
+  // Nudge item to the side away from the gate so it remains reachable
+  if (player.x < g.x) {
+    item.x = clamp(g.x - item.w - 6, 8, W - item.w - 8);
+  } else {
+    item.x = clamp(g.x + g.w + 6, 8, W - item.w - 8);
+  }
+  item.y = clamp(item.y, 8, H - item.h - 8);
+}
+function rectsTouchOrOverlap(a, b, pad=0) {
+  // Inclusive edges so the player touching the gate can still trigger it
+  return (
+    a.x - pad <= b.x + b.w &&
+    a.x + a.w + pad >= b.x &&
+    a.y - pad <= b.y + b.h &&
+    a.y + a.h + pad >= b.y
+  );
+}
 function rectsOverlap(a, b) {
   return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 }
@@ -228,6 +271,16 @@ function drawRect(r, color="#fff") {
 }
 function outlineRect(r, color="#fff") {
   ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.strokeRect(r.x+1, r.y+1, r.w-2, r.h-2);
+}
+function drawWallRect(r, color="#2a3340", stroke="#11161d") {
+  const grad = ctx.createLinearGradient(r.x, r.y, r.x, r.y + r.h);
+  grad.addColorStop(0, color);
+  grad.addColorStop(1, "#1b222c");
+  ctx.fillStyle = grad;
+  ctx.fillRect(r.x, r.y, r.w, r.h);
+  ctx.strokeStyle = stroke;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2);
 }
 function drawImageOrFallback(img, r, color, label) {
   if (img && img.complete && img.naturalWidth > 0) {
@@ -278,7 +331,7 @@ function drawCastleSilhouette(cfg={}) {
     h = 360
   } = cfg;
 
-  const towerWidth = Math.min(80, w * 0.2);
+  const towerWidth = Math.min(70, w * 0.15);
   const towerHeight = h + 40;
   ctx.fillStyle = color;
   ctx.fillRect(x, y, w, h);
@@ -287,7 +340,8 @@ function drawCastleSilhouette(cfg={}) {
   ctx.strokeRect(x, y, w, h);
 
   for (let i=0; i<towers; i++) {
-    const tx = i === 0 ? x - towerWidth + 20 : x + w - 20;
+    const offset = Math.min(30, towerWidth * 0.6);
+    const tx = i === 0 ? x - offset : x + w - towerWidth + offset/2;
     ctx.fillStyle = color;
     ctx.fillRect(tx, y - 10, towerWidth, towerHeight);
     ctx.strokeRect(tx, y - 10, towerWidth, towerHeight);
@@ -464,6 +518,7 @@ const IMAGES = { player: null, dragon: null, dragonDead: null, key: null, sword:
 function loadKidAssets(kidId) {
   const kid = ASSET_CONFIG[kidId] || ASSET_CONFIG[DEFAULT_KID_ID];
   activeKidName = kid.displayName || kidId;
+  updateAdventureTitle();
   Object.entries(kid.assets).forEach(([key, url]) => loadAssetImage(key, url));
 }
 
@@ -529,36 +584,57 @@ function syncQueryParams() {
   history.replaceState(null, "", url);
 }
 
+function updateAdventureTitle() {
+  const titleEl = document.getElementById("gameTitle");
+  if (!titleEl) return;
+  const suffix = activeKidName.endsWith("s") ? "'" : "'s";
+  titleEl.textContent = `${activeKidName}${suffix} Adventure`;
+}
+
 loadKidAssets(activeKidId);
 populateKidSelector();
 populateLevelSelector();
+updateAdventureTitle();
 
 /* =========================================================
    World + Rooms (2x2 grid)
    ========================================================= */
 
 class Gate {
-  constructor(x,y,w,h) {
+  constructor(x,y,w,h, options={}) {
     this.rect = { x, y, w, h };
-    this.open = false;
-    this.requiredKey = null;
+    this.open = options.open ?? false;
+    this.requiredKey = options.requiredKey ?? "key";
+    this.targetRoom = options.targetRoom || null;
+    this.targetDir = options.targetDir || "default";
+    this.targetEntry = options.targetEntry || null;
+    this.closedColor = options.closedColor || "rgba(68,187,109,0.55)";
   }
   tryOpen(player) {
-    if (!this.open && player.holding && player.holding.kind === "key" && rectsOverlap(player, this.rect)) {
+    if (!this.open && player.holding && player.holding.kind === this.requiredKey && rectsTouchOrOverlap(player, this.rect, 2)) {
       this.open = true;
       showToast("Gate opened");
+    }
+  }
+  tryEnter(player) {
+    if (!this.open || !this.targetRoom) return;
+    if (rectsOverlap(player, this.rect)) {
+      WORLD.transitionTo(this.targetRoom, this.targetDir, { overrides: this.targetEntry || {}, carryHeld: true });
     }
   }
   blockRect() { return this.open ? null : this.rect; }
   draw() {
     if (this.open) {
-      // open gate “posts”
+      // open gate "posts"
       const postW = Math.min(14, this.rect.w/3);
       drawRect({x:this.rect.x, y:this.rect.y, w:postW, h:this.rect.h}, "#2b9154");
       drawRect({x:this.rect.x+this.rect.w-postW, y:this.rect.y, w:postW, h:this.rect.h}, "#2b9154");
     } else {
-      drawRect(this.rect, "#44bb6d");
+      drawRect(this.rect, this.closedColor);
       outlineRect(this.rect, "#2b9154");
+      // horizontal bar across the door for clarity
+      ctx.fillStyle = "#2b9154";
+      ctx.fillRect(this.rect.x, this.rect.y + this.rect.h/2 - 6, this.rect.w, 12);
     }
   }
 }
@@ -667,7 +743,10 @@ class Player {
     this._move(dx, dy, room);
 
     // gate interaction
-    if (room.gate) room.gate.tryOpen(this);
+    if (room.gate) {
+      room.gate.tryOpen(this);
+      room.gate.tryEnter(this);
+    }
 
     // pick / drop
     if (wasPressed("e") || touchActionPressed("interact")) {
@@ -692,6 +771,7 @@ class Player {
         it.heldBy = null; this.holding = null;
         it.x = clamp(this.x + this.w + 6, 8, W - it.w - 8);
         it.y = clamp(this.y + (this.h - it.h)/2, 8, H - it.h - 8);
+        resolveItemGateOverlap(it, room, this);
         WORLD.addItemToRoom(it, WORLD.currentRoomId);
         showToast("Dropped item");
       }
@@ -812,9 +892,8 @@ class Room {
   }
   draw() {
     this.drawBackdrop();
-    if (this.castle) {
-      drawCastleSilhouette(this.castle);
-    }
+    // walls first
+    for (const w of this.walls) { drawWallRect(w, "#2d3542", "#11161d"); }
     // pedestal
     if (this.pedestal) {
       drawRect(this.pedestal, "#343b46");
@@ -824,9 +903,11 @@ class Room {
       ctx.textAlign="center"; ctx.textBaseline="top";
       ctx.fillText("PEDESTAL", this.pedestal.x + this.pedestal.w/2, this.pedestal.y + this.pedestal.h + 4);
     }
-    // walls
-    for (const w of this.walls) { drawRect(w, "#2a3340"); outlineRect(w, "#11161d"); }
-    // gate
+    // castle overlay for clarity
+    if (this.castle) {
+      drawCastleSilhouette(this.castle);
+    }
+    // gate on top
     if (this.gate) this.gate.draw();
     // items (not held)
     for (const it of this.items) if (it.alive && !it.heldBy) it.draw();
@@ -990,21 +1071,23 @@ function buildClassicLayout(world) {
   });
 
   addRoom("yellowCourtyard", "Yellow Castle Gate", {
-    neighbors: { west: "meadow", east: "yellowHall" },
+    neighbors: { west: "meadow" },
     bgColor: "#1e1d26"
   }, (room) => {
-    addBoundaryWalls(room, { open: { west: true, east: true } });
+    addBoundaryWalls(room, { open: { west: true } });
     room.entryPoints = {
-      west: { x: 40, y: H/2 - 40 },
-      east: { x: W - 120, y: H/2 - 40 }
+      west: { x: 80, y: H/2 - 40 },
+      east: { x: W - 180, y: H/2 - 40 }
     };
     room.castle = { color: "#f4d26a", accent: "#fff2a1", door: "west", label: "Yellow Castle", x: 280, y: 120, w: 360, h: 280 };
-    room.walls.push(
-      { x: 280, y: 120, w: 40, h: 360 },
-      { x: 280, y: 120, w: 220, h: 20 },
-      { x: 280, y: 460, w: 220, h: 20 }
-    );
-    room.gate = new Gate(520, 160, 40, 220);
+    room.walls = [];
+    room.gate = new Gate(280 + 360/2 - 45, 120 + 280 - 130, 90, 120, {
+      targetRoom: "yellowHall",
+      targetDir: "west",
+      targetEntry: { x: 140, y: H/2 - 30 },
+      requiredKey: "key",
+      open: false
+    });
   });
 
   addRoom("yellowHall", "Yellow Castle Interior", {
@@ -1018,7 +1101,6 @@ function buildClassicLayout(world) {
       { x: 300, y: 160, w: 20, h: 280 },
       { x: 500, y: 120, w: 20, h: 360 }
     );
-    room.pedestal = { x: W - 200, y: H/2 - 30, w: 130, h: 22 };
   });
 
   addRoom("riverbank", "Riverbank", {
@@ -1100,6 +1182,13 @@ function buildClassicLayout(world) {
     bgColor: "#1b2a15"
   }, (room) => {
     addBoundaryWalls(room, { open: { west: true, east: true } });
+    room.gate = new Gate(W/2 - 45, H/2 - 60, 90, 120, {
+      targetRoom: "greenHall",
+      targetDir: "west",
+      targetEntry: { x: 140, y: H/2 - 26 },
+      requiredKey: "key",
+      open: true
+    });
     room.castle = { color: "#4c6f3f", accent: "#aee09a", door: "west", label: "Green Castle", x: 260, y: 140, w: 420, h: 260 };
     room.walls.push(
       { x: 260, y: 140, w: 20, h: 320 },
@@ -1109,7 +1198,8 @@ function buildClassicLayout(world) {
 
   addRoom("greenHall", "Green Castle Interior", {
     neighbors: { west: "greenEntrance" },
-    bgColor: "#2d3f23"
+    bgColor: "#2d3f23",
+    entryPoints: { west: { x: 140, y: H/2 - 26 }, default: { x: 140, y: H/2 - 26 } }
   }, (room) => {
     addBoundaryWalls(room, { open: { west: true } });
     room.castle = { color: "#36502f", accent: "#d8ffc4", door: "east", label: "Treasure Room", x: 220, y: 120, w: 520, h: 280 };
@@ -1132,7 +1222,8 @@ function buildClassicLayout(world) {
   });
 
   world.addItemToRoom(new Item("sword", 220, H/2 - 16, 64, 24), "meadow");
-  world.addItemToRoom(new Item("key", W/2 - 20, 200, 40, 26), "blackHall");
+  // Key placed near gate for easy access
+  world.addItemToRoom(new Item("key", 360, H/2 + 40, 42, 26), "yellowCourtyard");
   world.addItemToRoom(new Item("trophy", W - 260, H/2 - 24, 44, 36), "greenHall");
 
   const dragon = new Dragon(W - 260, H/2 - 32);
@@ -1159,17 +1250,19 @@ function buildShuffledLayout(world) {
   });
 
   addRoom("yellowCourtyard", "Castle Fork", {
-    neighbors: { north: "meadow", south: "swamp", east: "yellowHall" },
+    neighbors: { north: "meadow", south: "swamp" },
     bgColor: "#201c2a"
   }, (room) => {
-    addBoundaryWalls(room, { open: { north: true, south: true, east: true } });
+    addBoundaryWalls(room, { open: { north: true, south: true } });
     room.castle = { color: "#e7d57f", accent: "#fff7b3", door: "east", label: "Yellow Castle", x: 260, y: 120, w: 380, h: 280 };
-    room.walls.push(
-      { x: 260, y: 140, w: 40, h: 320 },
-      { x: 260, y: 140, w: 260, h: 20 },
-      { x: 260, y: 460, w: 260, h: 20 }
-    );
-    room.gate = new Gate(540, 180, 36, 200);
+    room.walls = [];
+    room.gate = new Gate(260 + 380/2 - 45, 120 + 280 - 130, 90, 120, {
+      targetRoom: "yellowHall",
+      targetDir: "west",
+      targetEntry: { x: 110, y: H/2 - 36 },
+      requiredKey: "key",
+      open: false
+    });
   });
 
   addRoom("yellowHall", "Golden Keep", {
@@ -1183,7 +1276,6 @@ function buildShuffledLayout(world) {
       { x: 280, y: 160, w: 20, h: 280 },
       { x: 520, y: 140, w: 20, h: 320 }
     );
-    room.pedestal = { x: W - 220, y: H/2 - 24, w: 160, h: 20 };
   });
 
   addRoom("woods", "Twisted Woods", {
@@ -1291,7 +1383,7 @@ function buildShuffledLayout(world) {
   });
 
   world.addItemToRoom(new Item("sword", 140, 120, 56, 20), "riverbank");
-  world.addItemToRoom(new Item("key", W - 220, H/2 - 24, 40, 24), "greenHall");
+  world.addItemToRoom(new Item("key", 340, H/2 + 20, 40, 24), "yellowCourtyard");
   world.addItemToRoom(new Item("trophy", W - 260, H/2 - 24, 44, 36), "yellowHall");
 
   const dragon = new Dragon(80, H/2 - 32);
@@ -1346,7 +1438,6 @@ function buildLabyrinthLayout(world) {
   }, (room) => {
     addBoundaryWalls(room, { open: { west: true } });
     room.castle = { color: "#9f7d39", accent: "#ffe7a6", door: "east", label: "Throne", x: 200, y: 140, w: 520, h: 260 };
-    room.pedestal = { x: W - 220, y: H/2 - 32, w: 150, h: 22 };
   });
 
   addRoom("mazeEntry", "Maze Gate", {
@@ -1441,7 +1532,7 @@ function buildLabyrinthLayout(world) {
   });
 
   world.addItemToRoom(new Item("sword", 260, 220, 64, 26), "mazeEntry");
-  world.addItemToRoom(new Item("key", W/2 - 20, H/2 - 10, 40, 24), "blackHall");
+  world.addItemToRoom(new Item("key", 320, H/2 + 30, 40, 24), "meadow");
   world.addItemToRoom(new Item("trophy", W - 280, H/2 - 26, 44, 36), "greenHall");
 
   const dragon = new Dragon(W - 260, H/2 - 32);
@@ -1486,12 +1577,19 @@ function buildCatacombsLayout(world) {
   });
 
   addRoom("yellowCourtyard", "Sunken Yellow Gate", {
-    neighbors: { west: "riverWatch", east: "yellowHall" },
+    neighbors: { west: "riverWatch" },
     bgColor: "#30251b"
   }, (room) => {
-    addBoundaryWalls(room, { open: { west: true, east: true } });
+    addBoundaryWalls(room, { open: { west: true } });
     room.castle = { color: "#f4d26a", accent: "#fff2a1", roof: "#b98b41", door: "west", label: "Yellow Castle", x: 300, y: 120, w: 340, h: 260 };
-    room.gate = new Gate(540, 170, 36, 220);
+    room.walls = [];
+    room.gate = new Gate(300 + 340/2 - 45, 120 + 260 - 130, 90, 120, {
+      targetRoom: "yellowHall",
+      targetDir: "west",
+      targetEntry: { x: 120, y: H/2 - 36 },
+      requiredKey: "key",
+      open: false
+    });
   });
 
   addRoom("yellowHall", "Golden Treasury", {
@@ -1615,12 +1713,20 @@ function buildCatacombsLayout(world) {
     bgColor: "#18321b"
   }, (room) => {
     addBoundaryWalls(room, { open: { west: true, east: true } });
+    room.gate = new Gate(W/2 - 45, H/2 - 60, 90, 120, {
+      targetRoom: "greenHall",
+      targetDir: "west",
+      targetEntry: { x: 140, y: H/2 - 30 },
+      requiredKey: "key",
+      open: true
+    });
     room.castle = { color: "#466b3d", accent: "#c4f0ad", roof: "#2d4e29", door: "west", label: "Green Castle", x: 300, y: 150, w: 360, h: 240 };
   });
 
   addRoom("greenHall", "Emerald Vault", {
     neighbors: { west: "greenEntrance" },
-    bgColor: "#234026"
+    bgColor: "#234026",
+    entryPoints: { west: { x: 140, y: H/2 - 30 }, default: { x: 140, y: H/2 - 30 } }
   }, (room) => {
     addBoundaryWalls(room, { open: { west: true } });
     room.castle = { color: "#33522f", accent: "#d4ffbf", roof: "#1f311f", door: "east", label: "Vault", x: 240, y: 140, w: 500, h: 260 };
@@ -1673,11 +1779,19 @@ function buildHighlandsLayout(world) {
   });
 
   addRoom("yellowCourtyard", "Yellow Outpost", {
-    neighbors: { west: "ridge", east: "yellowHall", south: "cliffRoad" },
+    neighbors: { west: "ridge", south: "cliffRoad" },
     bgColor: "#302615"
   }, (room) => {
-    addBoundaryWalls(room, { open: { west: true, east: true, south: true } });
+    addBoundaryWalls(room, { open: { west: true, south: true } });
     room.castle = { color: "#f2d37b", accent: "#fff6b0", roof: "#b9853f", door: "west", label: "Yellow Castle", x: 300, y: 110, w: 360, h: 260 };
+    room.walls = [];
+    room.gate = new Gate(300 + 360/2 - 45, 110 + 260 - 130, 90, 120, {
+      targetRoom: "yellowHall",
+      targetDir: "west",
+      targetEntry: { x: 120, y: H/2 - 40 },
+      requiredKey: "key",
+      open: false
+    });
   });
 
   addRoom("yellowHall", "Golden Hall", {
@@ -1729,6 +1843,13 @@ function buildHighlandsLayout(world) {
   }, (room) => {
     addBoundaryWalls(room, { open: { west: true, east: true } });
     room.castle = { color: "#3c3c3c", accent: "#cfcfcf", roof: "#202020", door: "west", label: "Black Castle", x: 320, y: 140, w: 360, h: 260 };
+    room.gate = new Gate(W/2 - 45, H/2 - 60, 90, 120, {
+      targetRoom: "blackHall",
+      targetDir: "west",
+      targetEntry: { x: 140, y: H/2 - 30 },
+      requiredKey: "key",
+      open: false
+    });
   });
 
   addRoom("blackHall", "Shadow Citadel", {
@@ -1744,12 +1865,20 @@ function buildHighlandsLayout(world) {
     bgColor: "#17311b"
   }, (room) => {
     addBoundaryWalls(room, { open: { west: true, east: true } });
+    room.gate = new Gate(W/2 - 45, H/2 - 60, 90, 120, {
+      targetRoom: "greenHall",
+      targetDir: "west",
+      targetEntry: { x: 140, y: H/2 - 28 },
+      requiredKey: "key",
+      open: true
+    });
     room.castle = { color: "#436c38", accent: "#d2feb8", roof: "#264627", door: "west", label: "Green Castle", x: 300, y: 140, w: 360, h: 240 };
   });
 
   addRoom("greenHall", "Emerald Hall", {
     neighbors: { west: "greenEntrance" },
-    bgColor: "#224428"
+    bgColor: "#224428",
+    entryPoints: { west: { x: 140, y: H/2 - 28 }, default: { x: 140, y: H/2 - 28 } }
   }, (room) => {
     addBoundaryWalls(room, { open: { west: true } });
     room.castle = { color: "#33542f", accent: "#dcffbe", roof: "#223122", door: "east", label: "Vault", x: 260, y: 140, w: 520, h: 260 };
@@ -1843,6 +1972,13 @@ function buildGauntletLayout(world) {
   }, (room) => {
     addBoundaryWalls(room, { open: { west: true, east: true, south: true } });
     room.castle = { color: "#e4c36d", accent: "#fff4ab", roof: "#b07c36", door: "west", label: "Fortress", x: 320, y: 110, w: 360, h: 260 };
+    room.gate = new Gate(W/2 - 45, H/2 - 60, 90, 120, {
+      targetRoom: "fortHall",
+      targetDir: "west",
+      targetEntry: { x: 120, y: H/2 - 40 },
+      requiredKey: "key",
+      open: false
+    });
   });
 
   addRoom("fortHall", "Fortress Hall", {
@@ -1916,6 +2052,13 @@ function buildGauntletLayout(world) {
   }, (room) => {
     addBoundaryWalls(room, { open: { west: true, east: true } });
     room.castle = { color: "#404040", accent: "#dcdcdc", roof: "#242424", door: "west", label: "Black Fortress", x: 320, y: 140, w: 360, h: 260 };
+    room.gate = new Gate(W/2 - 45, H/2 - 60, 90, 120, {
+      targetRoom: "blackHall",
+      targetDir: "west",
+      targetEntry: { x: 140, y: H/2 - 30 },
+      requiredKey: "key",
+      open: false
+    });
   });
 
   addRoom("blackHall", "Black Fortress", {
@@ -1959,11 +2102,19 @@ function buildGauntletLayout(world) {
   }, (room) => {
     addBoundaryWalls(room, { open: { west: true, east: true } });
     room.castle = { color: "#3f6534", accent: "#c6f7b2", roof: "#274326", door: "west", label: "Green Castle", x: 300, y: 150, w: 360, h: 240 };
+    room.gate = new Gate(W/2 - 45, H/2 - 60, 90, 120, {
+      targetRoom: "greenHall",
+      targetDir: "west",
+      targetEntry: { x: 140, y: H/2 - 30 },
+      requiredKey: "key",
+      open: true
+    });
   });
 
   addRoom("greenHall", "Verdant Hall", {
     neighbors: { west: "greenEntrance" },
-    bgColor: "#214224"
+    bgColor: "#214224",
+    entryPoints: { west: { x: 140, y: H/2 - 30 }, default: { x: 140, y: H/2 - 30 } }
   }, (room) => {
     addBoundaryWalls(room, { open: { west: true } });
   });
