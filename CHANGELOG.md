@@ -1,5 +1,12 @@
 # Changelog
 
+## 2025-11-21
+- Added colored keys (yellow/black/green) plus a white master key and updated gates to match.
+- Added bridge item that lets you pass through walls while carrying it.
+- Added a bat that steals items and moves them between rooms.
+- Added secret doors, extra rooms per layout, and larger Level 1/2/3 maps.
+- Added multiple dragon types per layout with varied speed/aggro.
+
 ## 2025-11-20
 - Fixed castle gates so they unlock when the key is touching them, preventing the closed gate from blocking the unlock.
 - Clarified instructions that gates pop open automatically when you walk into them with the key.

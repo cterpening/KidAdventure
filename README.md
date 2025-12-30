@@ -4,10 +4,11 @@ Kid Adventure is a browser-based tribute to the Atari 2600 classic. Pick a kid-s
 
 ## How to Play
 - Move with WASD/arrow keys or the on-screen D-pad (tablets/phones).
-- Press `E` / "Use" to pick up items; gates open automatically when you touch them while holding the key.
-- `Q` / "Drop" button drops the item you are carrying.
-- Find the sword near the starting meadow, then defeat the dragon guarding the trophy.
-- Carry the key up to a castle gate to swing it open, then dive deeper to grab the trophy and bring it home.
+- Press `E` / "Use" to pick up items; `Q` / "Drop" sets them down.
+- Match yellow, black, and green keys to their gates. The white key opens any gate.
+- The bridge lets you pass through walls while you carry it.
+- The bat steals items and moves them between rooms, so expect surprises.
+- Defeat dragons with the sword, then bring the trophy back to the start pedestal.
 
 ## Custom Kid Art
 - Drop PNGs or JPGs into `assets/kids/<kidId>/` named `player.png`.

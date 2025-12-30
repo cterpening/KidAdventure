@@ -134,14 +134,14 @@
   <aside>
     <h1 id="gameTitle">Kid Adventure</h1>
     <div class="row tips">
-      Carry one item at a time. Grab the <b>sword</b> to fight the dragon, pick up the <b>key</b> to unlock castle gates, and return the <b>trophy</b> to the start pedestal to win.
+      Carry one item at a time. Grab the <b>sword</b> to fight dragons, use the <b>bridge</b> to pass through walls, and match <b>colored keys</b> to their gates. The white key opens any gate. Return the <b>trophy</b> to the start pedestal to win.
     </div>
     <h2>How to Play</h2>
     <div class="row tips">
-      <b>1.</b> Explore to find the sword near the meadow.<br>
-      <b>2.</b> Hunt down the dragon (sword defeats it).<br>
-      <b>3.</b> Carry the key into castle gates to swing them open—no extra button press needed.<br>
-      <b>4.</b> Snag the trophy from the depths and bring it home.<br>
+      <b>1.</b> Find the sword and bridge near the start routes.<br>
+      <b>2.</b> Match yellow, black, and green keys to their gates (white key opens any gate).<br>
+      <b>3.</b> The bat steals items and drops them in other rooms.<br>
+      <b>4.</b> Defeat dragons with the sword, then bring the trophy home.<br>
       Gates, dragons, and treasures move around depending on the level you pick.
     </div>
 
@@ -218,11 +218,23 @@ ctx.imageSmoothingEnabled = false;
 
 const keys = new Set();
 const held = (k) => keys.has(k);
+const KEY_CAPTURE_TAGS = new Set(["INPUT", "SELECT", "TEXTAREA", "BUTTON"]);
+const PREVENT_KEYS = new Set(["arrowup", "arrowdown", "arrowleft", "arrowright", " "]);
+function shouldCaptureKey(e) {
+  const tag = e.target?.tagName;
+  return !tag || !KEY_CAPTURE_TAGS.has(tag);
+}
 addEventListener("keydown", (e) => {
-  keys.add(e.key.toLowerCase());
+  if (!shouldCaptureKey(e)) return;
+  const key = e.key.toLowerCase();
+  if (PREVENT_KEYS.has(key)) e.preventDefault();
+  keys.add(key);
 });
 addEventListener("keyup", (e) => {
-  keys.delete(e.key.toLowerCase());
+  if (!shouldCaptureKey(e)) return;
+  const key = e.key.toLowerCase();
+  if (PREVENT_KEYS.has(key)) e.preventDefault();
+  keys.delete(key);
 });
 
 const touchState = {
@@ -441,6 +453,10 @@ function addBoundaryWalls(room, options={}) {
   }
 }
 
+function addSecretDoor(room, rect, targetRoom, targetDir, targetEntry, requiresItem) {
+  room.secretDoors.push({ rect, targetRoom, targetDir, targetEntry, requiresItem });
+}
+
 function createRoomAdder(world) {
   return function addRoom(id, name, options={}, setup) {
     const room = new Room(id, name, options);
@@ -514,6 +530,34 @@ let activeKidName = ASSET_CONFIG[activeKidId]?.displayName || "Default Hero";
 let activeLevelId = (queryLevel && LEVEL_CONFIG[queryLevel]) ? queryLevel : DEFAULT_LEVEL_ID;
 let activeLevelName = LEVEL_CONFIG[activeLevelId]?.label || LEVEL_CONFIG[DEFAULT_LEVEL_ID].label;
 const IMAGES = { player: null, dragon: null, dragonDead: null, key: null, sword: null, trophy: null };
+const ITEM_DEFS = {
+  sword: { label: "Sword", color: "#dfe6ef", imageKey: "sword" },
+  trophy: { label: "Trophy", color: "#f7b500", imageKey: "trophy" },
+  bridge: { label: "Bridge", color: "#8bc6ff", imageKey: null },
+  "key-yellow": { label: "Yellow Key", color: "#f6d26a", gateColor: "#d1ac3b", imageKey: "key" },
+  "key-black": { label: "Black Key", color: "#9aa0a6", gateColor: "#3b3b3b", imageKey: "key" },
+  "key-green": { label: "Green Key", color: "#72e39a", gateColor: "#2b9154", imageKey: "key" },
+  "key-white": { label: "White Key", color: "#e8eef8", gateColor: "#cfd8e3", imageKey: "key" },
+  key: { label: "Yellow Key", color: "#f6d26a", gateColor: "#d1ac3b", imageKey: "key" }
+};
+
+function normalizeKeyKind(kind) {
+  if (kind === "key") return "key-yellow";
+  return kind;
+}
+
+function itemDef(kind) {
+  return ITEM_DEFS[normalizeKeyKind(kind)] || { label: kind.toUpperCase(), color: "#888", imageKey: null };
+}
+
+function itemDisplayName(kind) {
+  return itemDef(kind).label;
+}
+
+function gateColorForKey(kind) {
+  const def = itemDef(kind);
+  return def.gateColor || "#2b9154";
+}
 
 function loadKidAssets(kidId) {
   const kid = ASSET_CONFIG[kidId] || ASSET_CONFIG[DEFAULT_KID_ID];
@@ -604,15 +648,20 @@ class Gate {
   constructor(x,y,w,h, options={}) {
     this.rect = { x, y, w, h };
     this.open = options.open ?? false;
-    this.requiredKey = options.requiredKey ?? "key";
+    this.requiredKey = options.requiredKey ?? "key-yellow";
     this.targetRoom = options.targetRoom || null;
     this.targetDir = options.targetDir || "default";
     this.targetEntry = options.targetEntry || null;
-    this.closedColor = options.closedColor || "rgba(68,187,109,0.55)";
+    this.closedColor = options.closedColor || gateColorForKey(this.requiredKey);
   }
   tryOpen(player) {
-    if (!this.open && player.holding && player.holding.kind === this.requiredKey && rectsTouchOrOverlap(player, this.rect, 2)) {
+    if (this.open || !player.holding) return;
+    const heldKind = normalizeKeyKind(player.holding.kind);
+    const required = normalizeKeyKind(this.requiredKey);
+    const canOpen = heldKind === "key-white" || heldKind === required;
+    if (canOpen && rectsTouchOrOverlap(player, this.rect, 2)) {
       this.open = true;
+      this.closedColor = gateColorForKey(this.requiredKey);
       showToast("Gate opened");
     }
   }
@@ -624,16 +673,17 @@ class Gate {
   }
   blockRect() { return this.open ? null : this.rect; }
   draw() {
+    const gateColor = this.closedColor || gateColorForKey(this.requiredKey);
     if (this.open) {
       // open gate "posts"
       const postW = Math.min(14, this.rect.w/3);
-      drawRect({x:this.rect.x, y:this.rect.y, w:postW, h:this.rect.h}, "#2b9154");
-      drawRect({x:this.rect.x+this.rect.w-postW, y:this.rect.y, w:postW, h:this.rect.h}, "#2b9154");
+      drawRect({x:this.rect.x, y:this.rect.y, w:postW, h:this.rect.h}, gateColor);
+      drawRect({x:this.rect.x+this.rect.w-postW, y:this.rect.y, w:postW, h:this.rect.h}, gateColor);
     } else {
-      drawRect(this.rect, this.closedColor);
-      outlineRect(this.rect, "#2b9154");
+      drawRect(this.rect, gateColor);
+      outlineRect(this.rect, "#1b1f27");
       // horizontal bar across the door for clarity
-      ctx.fillStyle = "#2b9154";
+      ctx.fillStyle = "#1b1f27";
       ctx.fillRect(this.rect.x, this.rect.y + this.rect.h/2 - 6, this.rect.w, 12);
     }
   }
@@ -641,7 +691,7 @@ class Gate {
 
 class Item {
   constructor(kind, x,y,w,h) {
-    this.kind = kind; // "key" | "sword" | "trophy"
+    this.kind = kind; // "key-*" | "sword" | "bridge" | "trophy"
     this.x=x; this.y=y; this.w=w; this.h=h;
     this.heldBy = null;
     this.alive = true;
@@ -650,19 +700,19 @@ class Item {
   rect(){ return this; }
   draw() {
     const r = this.rect();
-    let img = null, color = "#888", label = "";
-    if (this.kind === "key") { img = IMAGES.key; color="#ffcc00"; label="KEY"; }
-    if (this.kind === "sword") { img = IMAGES.sword; color="#dfe6ef"; label="SWORD"; }
-    if (this.kind === "trophy") { img = IMAGES.trophy; color="#f7b500"; label="TROPHY"; }
-    drawImageOrFallback(img, r, color, label);
+    const def = itemDef(this.kind);
+    const img = def.imageKey ? IMAGES[def.imageKey] : null;
+    const label = def.label ? def.label.toUpperCase() : this.kind.toUpperCase();
+    drawImageOrFallback(img, r, def.color || "#888", label);
     outlineRect(r, "rgba(0,0,0,.35)");
   }
 }
 
 class Dragon {
-  constructor(x,y) {
+  constructor(x,y, options={}) {
     this.x=x; this.y=y; this.w=84; this.h=64;
-    this.speed = 180;
+    this.speed = options.speed ?? 180;
+    this.aggroRange = options.aggroRange ?? 800;
     this.alive = true;
     this.wanderTimer = 0;
     this.wanderDir = { x: 0, y: 0 };
@@ -675,7 +725,7 @@ class Dragon {
     const toPlayerY = (player.y + player.h/2) - (this.y + this.h/2);
     const dist = Math.hypot(toPlayerX, toPlayerY);
     let vx = 0, vy = 0;
-    if (dist < 800) { // aggro
+    if (dist < this.aggroRange) { // aggro
       vx = (toPlayerX / (dist||1)) * this.speed;
       vy = (toPlayerY / (dist||1)) * this.speed;
     } else {
@@ -720,6 +770,147 @@ class Dragon {
   }
 }
 
+class Bat {
+  constructor(x, y, roomId) {
+    this.x = x; this.y = y; this.w = 40; this.h = 26;
+    this.speed = 160;
+    this.roomId = roomId;
+    this.carrying = null;
+    this.wanderTimer = 0;
+    this.wanderDir = { x: 0, y: 0 };
+    this.travelTimer = 3 + Math.random() * 4;
+    this.dropTimer = 2 + Math.random() * 3;
+  }
+  rect(){ return this; }
+  update(dt, world) {
+    const room = world.rooms[this.roomId];
+    if (!room) return;
+
+    this.travelTimer -= dt;
+    if (this.travelTimer <= 0) {
+      this.travelTimer = 3 + Math.random() * 5;
+      const exits = Object.entries(room.neighbors).filter(([dir, id]) => id);
+      if (exits.length) {
+        const [dir, nextId] = exits[Math.floor(Math.random() * exits.length)];
+        this._moveToRoom(nextId, dir);
+        return;
+      }
+    }
+
+    this.wanderTimer -= dt;
+    if (this.wanderTimer <= 0) {
+      const angle = Math.random() * Math.PI * 2;
+      this.wanderDir.x = Math.cos(angle);
+      this.wanderDir.y = Math.sin(angle);
+      this.wanderTimer = 0.7 + Math.random() * 1.2;
+    }
+    this.x += this.wanderDir.x * this.speed * dt;
+    this.y += this.wanderDir.y * this.speed * dt;
+
+    if (this.x + this.w > W) {
+      const target = room.neighbors.east;
+      if (target) { this._moveToRoom(target, "west"); return; }
+      this.x = W - this.w;
+    }
+    if (this.x < 0) {
+      const target = room.neighbors.west;
+      if (target) { this._moveToRoom(target, "east"); return; }
+      this.x = 0;
+    }
+    if (this.y + this.h > H) {
+      const target = room.neighbors.south;
+      if (target) { this._moveToRoom(target, "north"); return; }
+      this.y = H - this.h;
+    }
+    if (this.y < 0) {
+      const target = room.neighbors.north;
+      if (target) { this._moveToRoom(target, "south"); return; }
+      this.y = 0;
+    }
+
+    this._stealFromRoom(room, world);
+    this._maybeDrop(world, dt);
+  }
+  _moveToRoom(nextId, incomingDir) {
+    this.roomId = nextId;
+    const margin = 18;
+    if (incomingDir === "west") {
+      this.x = margin;
+      this.y = clamp(this.y, margin, H - this.h - margin);
+    } else if (incomingDir === "east") {
+      this.x = W - this.w - margin;
+      this.y = clamp(this.y, margin, H - this.h - margin);
+    } else if (incomingDir === "north") {
+      this.y = margin;
+      this.x = clamp(this.x, margin, W - this.w - margin);
+    } else if (incomingDir === "south") {
+      this.y = H - this.h - margin;
+      this.x = clamp(this.x, margin, W - this.w - margin);
+    } else {
+      this.x = clamp(this.x, margin, W - this.w - margin);
+      this.y = clamp(this.y, margin, H - this.h - margin);
+    }
+  }
+  _stealFromRoom(room, world) {
+    if (this.carrying) return;
+    for (const it of room.items) {
+      if (it.alive && !it.heldBy && rectsOverlap(this, it)) {
+        world.removeItemFromRoom(it);
+        this.carrying = it;
+        return;
+      }
+    }
+    if (world.player.holding && this.roomId === world.currentRoomId && rectsOverlap(this, world.player)) {
+      this.carrying = world.player.holding;
+      this.carrying.heldBy = null;
+      world.player.holding = null;
+      showToast("Bat stole your item!");
+    }
+  }
+  _maybeDrop(world, dt) {
+    if (!this.carrying) return;
+    this.dropTimer -= dt;
+    if (this.dropTimer > 0) return;
+    this.dropTimer = 2 + Math.random() * 4;
+    const it = this.carrying;
+    this.carrying = null;
+    it.x = clamp(this.x + this.w + 6, 8, W - it.w - 8);
+    it.y = clamp(this.y + (this.h - it.h)/2, 8, H - it.h - 8);
+    world.addItemToRoom(it, this.roomId);
+  }
+  draw() {
+    const r = this.rect();
+    drawRect(r, "#6c7a89");
+    outlineRect(r, "#2b3038");
+    ctx.fillStyle = "#1b1f27";
+    ctx.font = "bold 10px system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("BAT", r.x + r.w/2, r.y + r.h/2);
+    if (this.carrying && this.roomId === WORLD.currentRoomId) {
+      const it = this.carrying;
+      const cx = r.x + r.w/2;
+      const cy = r.y - it.h - 4;
+      it.x = clamp(cx - it.w/2, 8, W - it.w - 8);
+      it.y = clamp(cy, 8, H - it.h - 8);
+      it.draw();
+    }
+  }
+}
+
+function findSecretDoor(room, player) {
+  if (!room.secretDoors || !room.secretDoors.length) return null;
+  for (const door of room.secretDoors) {
+    if (!rectsOverlap(player, door.rect)) continue;
+    if (!door.requiresItem) return door;
+    if (!player.holding) continue;
+    const heldKind = normalizeKeyKind(player.holding.kind);
+    const reqKind = normalizeKeyKind(door.requiresItem);
+    if (heldKind === reqKind || heldKind === "key-white") return door;
+  }
+  return null;
+}
+
 class Player {
   constructor() {
     this.x=40; this.y=H/2-20; this.w=48; this.h=48;
@@ -740,7 +931,15 @@ class Player {
       dx = (dx/mag) * this.speed * dt;
       dy = (dy/mag) * this.speed * dt;
     }
-    this._move(dx, dy, room);
+    if (this._move(dx, dy, room)) {
+      return;
+    }
+
+    const secretDoor = findSecretDoor(room, this);
+    if (secretDoor) {
+      WORLD.transitionTo(secretDoor.targetRoom, secretDoor.targetDir || "default", { overrides: secretDoor.targetEntry || {}, carryHeld: true });
+      return;
+    }
 
     // gate interaction
     if (room.gate) {
@@ -759,7 +958,7 @@ class Player {
           if (it.alive && !it.heldBy && rectsOverlap(this, it)) {
             WORLD.removeItemFromRoom(it);
             this.holding = it; it.heldBy = this;
-            showToast(`Picked up ${it.kind}`);
+            showToast(`Picked up ${itemDisplayName(it.kind)}`);
             break;
           }
         }
@@ -773,7 +972,7 @@ class Player {
         it.y = clamp(this.y + (this.h - it.h)/2, 8, H - it.h - 8);
         resolveItemGateOverlap(it, room, this);
         WORLD.addItemToRoom(it, WORLD.currentRoomId);
-        showToast("Dropped item");
+        showToast(`Dropped ${itemDisplayName(it.kind)}`);
       }
     }
 
@@ -787,7 +986,8 @@ class Player {
     if (this.invulnTimer > 0) this.invulnTimer -= dt;
   }
   _move(dx, dy, room) {
-    const solids = room.solidRects();
+    const useBridge = this.holding && this.holding.kind === "bridge";
+    const solids = room.solidRects({ ignoreWalls: useBridge });
     this.x += dx;
     for (const s of solids) if (rectsOverlap(this, s)) {
       if (dx > 0) this.x = s.x - this.w; else if (dx < 0) this.x = s.x + s.w;
@@ -803,7 +1003,7 @@ class Player {
       if (target) {
         const newY = clamp(this.y, 32, H - this.h - 32);
         WORLD.transitionTo(target, "west", { overrides: { y: newY }, carryHeld: true });
-        return;
+        return true;
       } else {
         this.x = W - this.w;
       }
@@ -813,7 +1013,7 @@ class Player {
       if (target) {
         const newY = clamp(this.y, 32, H - this.h - 32);
         WORLD.transitionTo(target, "east", { overrides: { y: newY }, carryHeld: true });
-        return;
+        return true;
       } else {
         this.x = 0;
       }
@@ -823,7 +1023,7 @@ class Player {
       if (target) {
         const newX = clamp(this.x, 32, W - this.w - 32);
         WORLD.transitionTo(target, "north", { overrides: { x: newX }, carryHeld: true });
-        return;
+        return true;
       } else {
         this.y = H - this.h;
       }
@@ -833,11 +1033,12 @@ class Player {
       if (target) {
         const newX = clamp(this.x, 32, W - this.w - 32);
         WORLD.transitionTo(target, "south", { overrides: { x: newX }, carryHeld: true });
-        return;
+        return true;
       } else {
         this.y = 0;
       }
     }
+    return false;
   }
   onHit() {
     this.invulnTimer = 1.2;
@@ -865,13 +1066,20 @@ class Room {
     this.entryPoints = options.entryPoints || {};
     this.bgColor = options.bgColor || "#0b0f15";
     this.walls = [];
+    this.invisibleWalls = [];
     this.items = [];
     this.enemies = [];
     this.gate = null;
     this.pedestal = null;
+    this.secretDoors = [];
   }
-  solidRects() {
-    const solids = [...this.walls];
+  solidRects(options={}) {
+    const ignoreWalls = options.ignoreWalls || false;
+    const solids = [];
+    if (!ignoreWalls) {
+      solids.push(...this.walls);
+      if (this.invisibleWalls.length) solids.push(...this.invisibleWalls);
+    }
     if (this.gate && !this.gate.open) solids.push(this.gate.rect);
     return solids;
   }
@@ -923,6 +1131,7 @@ const WORLD = {
   currentLayoutId: null,
   currentLayoutName: "",
   player: new Player(),
+  bat: null,
   buildRandomLayout() {
     const level = LEVEL_CONFIG[activeLevelId] || LEVEL_CONFIG[DEFAULT_LEVEL_ID];
     const variantIds = (level?.variants || []).filter(id => LAYOUT_VARIANTS[id]);
@@ -994,6 +1203,7 @@ const WORLD = {
   update(dt) {
     const room = this.current();
     for (const d of room.enemies) d.update(dt, room, this.player);
+    if (this.bat) this.bat.update(dt, this);
     this.player.update(dt, room);
 
     if (this.player.holding && this.player.holding.kind === "sword") {
@@ -1017,6 +1227,9 @@ const WORLD = {
   draw() {
     const room = this.current();
     room.draw();
+    if (this.bat && this.bat.roomId === this.currentRoomId) {
+      this.bat.draw();
+    }
     if (this.player.holding) this.player.holding.draw();
     this.player.draw();
   },
@@ -1036,6 +1249,7 @@ const WORLD = {
   },
   resetAll() {
     this.player = new Player();
+    this.bat = null;
     this.buildRandomLayout();
     this.transitionTo(START_ROOM_ID, "default", { silent: true });
     state.winTimer = 0;
@@ -1059,14 +1273,47 @@ function buildClassicLayout(world) {
   const addRoom = createRoomAdder(world);
 
   addRoom("meadow", "Yellow Castle Grounds", {
-    neighbors: { east: "yellowCourtyard", south: "riverbank" },
+    neighbors: { north: "ridge", east: "yellowCourtyard", south: "riverbank" },
     entryPoints: { default: { x: 72, y: H/2 - 24 } },
     bgColor: "#162316"
   }, (room) => {
-    addBoundaryWalls(room, { open: { east: true, south: true } });
+    addBoundaryWalls(room, { open: { north: true, west: true, east: true, south: true } });
     room.walls.push(
       { x: 200, y: 140, w: 20, h: 320 },
       { x: 360, y: 140, w: 20, h: 320 }
+    );
+  });
+
+  addRoom("ridge", "Hill Ridge", {
+    neighbors: { south: "meadow", east: "ruins" },
+    bgColor: "#1a2418"
+  }, (room) => {
+    addBoundaryWalls(room, { open: { south: true, east: true } });
+    room.walls.push(
+      { x: 160, y: 80, w: 24, h: 440 },
+      { x: 520, y: 100, w: 24, h: 400 }
+    );
+  });
+
+  addRoom("ruins", "Old Ruins", {
+    neighbors: { west: "ridge", east: "oldShrine" },
+    bgColor: "#262c2a"
+  }, (room) => {
+    addBoundaryWalls(room, { open: { west: true, east: true } });
+    room.walls.push(
+      { x: 220, y: 120, w: 40, h: 360 },
+      { x: 480, y: 160, w: 40, h: 300 }
+    );
+  });
+
+  addRoom("oldShrine", "Hidden Shrine", {
+    neighbors: { west: "ruins" },
+    bgColor: "#1b1e24"
+  }, (room) => {
+    addBoundaryWalls(room, { open: { west: true } });
+    room.walls.push(
+      { x: 300, y: 120, w: 20, h: 360 },
+      { x: 520, y: 80, w: 20, h: 440 }
     );
   });
 
@@ -1085,7 +1332,7 @@ function buildClassicLayout(world) {
       targetRoom: "yellowHall",
       targetDir: "west",
       targetEntry: { x: 140, y: H/2 - 30 },
-      requiredKey: "key",
+      requiredKey: "key-yellow",
       open: false
     });
   });
@@ -1138,6 +1385,13 @@ function buildClassicLayout(world) {
       { x: 260, y: 160, w: 20, h: 260 },
       { x: 520, y: 160, w: 20, h: 260 }
     );
+    room.gate = new Gate(W/2 - 45, H/2 - 60, 90, 120, {
+      targetRoom: "blackHall",
+      targetDir: "west",
+      targetEntry: { x: 140, y: H/2 - 30 },
+      requiredKey: "key-black",
+      open: false
+    });
   });
 
   addRoom("blackHall", "Black Castle Interior", {
@@ -1152,7 +1406,7 @@ function buildClassicLayout(world) {
   });
 
   addRoom("swamp", "Swamp", {
-    neighbors: { north: "riverbank", east: "greenMaze", south: "dragonLair" },
+    neighbors: { north: "riverbank", west: "marshEdge", east: "greenMaze", south: "dragonLair" },
     bgColor: "#132018"
   }, (room) => {
     addBoundaryWalls(room, { open: { north: true, east: true, south: true } });
@@ -1160,6 +1414,17 @@ function buildClassicLayout(world) {
       { x: 160, y: 160, w: 120, h: 120 },
       { x: 420, y: 100, w: 40, h: 180 },
       { x: 620, y: 320, w: 80, h: 160 }
+    );
+  });
+
+  addRoom("marshEdge", "Marsh Edge", {
+    neighbors: { east: "swamp" },
+    bgColor: "#101a14"
+  }, (room) => {
+    addBoundaryWalls(room, { open: { east: true } });
+    room.walls.push(
+      { x: 220, y: 140, w: 40, h: 320 },
+      { x: 480, y: 100, w: 40, h: 360 }
     );
   });
 
@@ -1186,8 +1451,8 @@ function buildClassicLayout(world) {
       targetRoom: "greenHall",
       targetDir: "west",
       targetEntry: { x: 140, y: H/2 - 26 },
-      requiredKey: "key",
-      open: true
+      requiredKey: "key-green",
+      open: false
     });
     room.castle = { color: "#4c6f3f", accent: "#aee09a", door: "west", label: "Green Castle", x: 260, y: 140, w: 420, h: 260 };
     room.walls.push(
@@ -1208,6 +1473,17 @@ function buildClassicLayout(world) {
     );
   });
 
+  addRoom("hiddenGrotto", "Hidden Grotto", {
+    neighbors: {},
+    bgColor: "#0f141a"
+  }, (room) => {
+    addBoundaryWalls(room, {});
+    room.walls.push(
+      { x: 240, y: 120, w: 20, h: 360 },
+      { x: 520, y: 120, w: 20, h: 360 }
+    );
+  });
+
   addRoom("dragonLair", "Dragon Lair", {
     neighbors: { north: "swamp" },
     bgColor: "#250c0c"
@@ -1221,13 +1497,21 @@ function buildClassicLayout(world) {
     );
   });
 
+  addSecretDoor(world.rooms.greenMaze, { x: W - 40, y: 80, w: 32, h: 120 }, "hiddenGrotto", "west", { x: 140, y: H/2 - 20 });
+
   world.addItemToRoom(new Item("sword", 220, H/2 - 16, 64, 24), "meadow");
-  // Key placed near gate for easy access
-  world.addItemToRoom(new Item("key", 360, H/2 + 40, 42, 26), "yellowCourtyard");
+  world.addItemToRoom(new Item("bridge", 120, H/2 + 100, 72, 20), "riverbank");
+  world.addItemToRoom(new Item("key-yellow", 200, 120, 40, 24), "woods");
+  world.addItemToRoom(new Item("key-black", 320, H/2 + 20, 40, 24), "yellowHall");
+  world.addItemToRoom(new Item("key-green", 300, H/2 - 20, 40, 24), "blackHall");
+  world.addItemToRoom(new Item("key-white", 360, H/2 - 10, 40, 24), "hiddenGrotto");
   world.addItemToRoom(new Item("trophy", W - 260, H/2 - 24, 44, 36), "greenHall");
 
-  const dragon = new Dragon(W - 260, H/2 - 32);
-  world.rooms.dragonLair.enemies.push(dragon);
+  world.bat = new Bat(240, 160, "woods");
+  const dragonFast = new Dragon(W - 260, H/2 - 32, { speed: 220, aggroRange: 900 });
+  const dragonSlow = new Dragon(260, 200, { speed: 140, aggroRange: 700 });
+  world.rooms.dragonLair.enemies.push(dragonFast);
+  world.rooms.swamp.enemies.push(dragonSlow);
 
   world.currentRoomId = START_ROOM_ID;
 }
@@ -1260,7 +1544,7 @@ function buildShuffledLayout(world) {
       targetRoom: "yellowHall",
       targetDir: "west",
       targetEntry: { x: 110, y: H/2 - 36 },
-      requiredKey: "key",
+      requiredKey: "key-yellow",
       open: false
     });
   });
@@ -1279,13 +1563,24 @@ function buildShuffledLayout(world) {
   });
 
   addRoom("woods", "Twisted Woods", {
-    neighbors: { south: "meadow", east: "blackEntrance" },
+    neighbors: { north: "overlook", south: "meadow", east: "blackEntrance" },
     bgColor: "#111c11"
   }, (room) => {
-    addBoundaryWalls(room, { open: { south: true, east: true } });
+    addBoundaryWalls(room, { open: { north: true, south: true, east: true } });
     room.walls.push(
       { x: 220, y: 80, w: 40, h: 440 },
       { x: 480, y: 40, w: 40, h: 520 }
+    );
+  });
+
+  addRoom("overlook", "Cliff Overlook", {
+    neighbors: { south: "woods" },
+    bgColor: "#20252f"
+  }, (room) => {
+    addBoundaryWalls(room, { open: { south: true } });
+    room.walls.push(
+      { x: 260, y: 120, w: 40, h: 360 },
+      { x: 520, y: 120, w: 40, h: 360 }
     );
   });
 
@@ -1299,6 +1594,13 @@ function buildShuffledLayout(world) {
       { x: 320, y: 180, w: 20, h: 220 },
       { x: 600, y: 140, w: 20, h: 320 }
     );
+    room.gate = new Gate(W/2 - 45, H/2 - 60, 90, 120, {
+      targetRoom: "blackHall",
+      targetDir: "west",
+      targetEntry: { x: 140, y: H/2 - 30 },
+      requiredKey: "key-black",
+      open: false
+    });
   });
 
   addRoom("blackHall", "Shadow Hall", {
@@ -1357,6 +1659,13 @@ function buildShuffledLayout(world) {
       { x: 280, y: 120, w: 20, h: 360 },
       { x: 560, y: 180, w: 20, h: 260 }
     );
+    room.gate = new Gate(W/2 - 45, H/2 - 60, 90, 120, {
+      targetRoom: "greenHall",
+      targetDir: "west",
+      targetEntry: { x: 140, y: H/2 - 30 },
+      requiredKey: "key-green",
+      open: false
+    });
   });
 
   addRoom("greenHall", "Emerald Hall", {
@@ -1371,10 +1680,10 @@ function buildShuffledLayout(world) {
   });
 
   addRoom("dragonLair", "Cavern Maw", {
-    neighbors: { north: "swamp" },
+    neighbors: { north: "swamp", south: "deepMarsh" },
     bgColor: "#2a0f12"
   }, (room) => {
-    addBoundaryWalls(room, { open: { north: true } });
+    addBoundaryWalls(room, { open: { north: true, south: true } });
     room.walls.push(
       { x: 260, y: 100, w: 40, h: 360 },
       { x: 260, y: 100, w: 380, h: 40 },
@@ -1382,12 +1691,43 @@ function buildShuffledLayout(world) {
     );
   });
 
-  world.addItemToRoom(new Item("sword", 140, 120, 56, 20), "riverbank");
-  world.addItemToRoom(new Item("key", 340, H/2 + 20, 40, 24), "yellowCourtyard");
-  world.addItemToRoom(new Item("trophy", W - 260, H/2 - 24, 44, 36), "yellowHall");
+  addRoom("deepMarsh", "Deep Marsh", {
+    neighbors: { north: "dragonLair" },
+    bgColor: "#1a1012"
+  }, (room) => {
+    addBoundaryWalls(room, { open: { north: true } });
+    room.walls.push(
+      { x: 220, y: 140, w: 40, h: 320 },
+      { x: 520, y: 120, w: 40, h: 360 }
+    );
+  });
 
-  const dragon = new Dragon(80, H/2 - 32);
-  world.rooms.dragonLair.enemies.push(dragon);
+  addRoom("hiddenVault", "Hidden Vault", {
+    neighbors: {},
+    bgColor: "#13161d"
+  }, (room) => {
+    addBoundaryWalls(room, {});
+    room.walls.push(
+      { x: 240, y: 120, w: 20, h: 360 },
+      { x: 520, y: 120, w: 20, h: 360 }
+    );
+  });
+
+  addSecretDoor(world.rooms.blackHall, { x: W - 36, y: H/2 - 60, w: 28, h: 120 }, "hiddenVault", "west", { x: 140, y: H/2 - 20 });
+
+  world.addItemToRoom(new Item("sword", 140, 120, 56, 20), "meadow");
+  world.addItemToRoom(new Item("bridge", 260, H/2 + 120, 72, 20), "riverbank");
+  world.addItemToRoom(new Item("key-yellow", 220, 160, 40, 24), "meadow");
+  world.addItemToRoom(new Item("key-black", 320, H/2 + 20, 40, 24), "yellowHall");
+  world.addItemToRoom(new Item("key-green", 300, H/2 - 10, 40, 24), "blackHall");
+  world.addItemToRoom(new Item("key-white", 360, H/2 - 10, 40, 24), "hiddenVault");
+  world.addItemToRoom(new Item("trophy", W - 260, H/2 - 24, 44, 36), "greenHall");
+
+  world.bat = new Bat(200, 140, "riverbank");
+  const dragonFast = new Dragon(80, H/2 - 32, { speed: 220, aggroRange: 900 });
+  const dragonSlow = new Dragon(260, 200, { speed: 140, aggroRange: 700 });
+  world.rooms.dragonLair.enemies.push(dragonFast);
+  world.rooms.swamp.enemies.push(dragonSlow);
 
   world.currentRoomId = START_ROOM_ID;
 }
@@ -1429,25 +1769,54 @@ function buildLabyrinthLayout(world) {
       { x: 300, y: 120, w: 20, h: 340 },
       { x: 520, y: 120, w: 20, h: 340 }
     );
+    room.gate = new Gate(280 + 360/2 - 45, 100 + 300 - 130, 90, 120, {
+      targetRoom: "yellowHall",
+      targetDir: "west",
+      targetEntry: { x: 150, y: H/2 - 30 },
+      requiredKey: "key-yellow",
+      open: false
+    });
   });
 
   addRoom("yellowHall", "Great Hall", {
-    neighbors: { west: "yellowCourtyard" },
+    neighbors: { west: "yellowCourtyard", east: "royalVault" },
     entryPoints: { default: { x: 150, y: H/2 - 30 } },
     bgColor: "#3c2e1f"
   }, (room) => {
-    addBoundaryWalls(room, { open: { west: true } });
+    addBoundaryWalls(room, { open: { west: true, east: true } });
     room.castle = { color: "#9f7d39", accent: "#ffe7a6", door: "east", label: "Throne", x: 200, y: 140, w: 520, h: 260 };
   });
 
+  addRoom("royalVault", "Royal Vault", {
+    neighbors: { west: "yellowHall" },
+    bgColor: "#2f2316"
+  }, (room) => {
+    addBoundaryWalls(room, { open: { west: true } });
+    room.walls.push(
+      { x: 320, y: 120, w: 20, h: 360 },
+      { x: 520, y: 120, w: 20, h: 360 }
+    );
+  });
+
   addRoom("mazeEntry", "Maze Gate", {
-    neighbors: { north: "meadow", east: "mazeCenter" },
+    neighbors: { north: "meadow", west: "mazeSide", east: "mazeCenter" },
     bgColor: "#15221a"
   }, (room) => {
-    addBoundaryWalls(room, { open: { north: true, east: true } });
+    addBoundaryWalls(room, { open: { north: true, west: true, east: true } });
     room.walls.push(
       { x: 320, y: 100, w: 20, h: 400 },
       { x: 500, y: 140, w: 20, h: 320 }
+    );
+  });
+
+  addRoom("mazeSide", "Maze Side", {
+    neighbors: { east: "mazeEntry" },
+    bgColor: "#121a12"
+  }, (room) => {
+    addBoundaryWalls(room, { open: { east: true } });
+    room.walls.push(
+      { x: 240, y: 120, w: 20, h: 360 },
+      { x: 520, y: 120, w: 20, h: 360 }
     );
   });
 
@@ -1470,6 +1839,13 @@ function buildLabyrinthLayout(world) {
   }, (room) => {
     addBoundaryWalls(room, { open: { west: true, east: true } });
     room.castle = { color: "#363636", accent: "#dedede", door: "west", label: "Black Castle", x: 300, y: 140, w: 380, h: 260 };
+    room.gate = new Gate(W/2 - 45, H/2 - 60, 90, 120, {
+      targetRoom: "blackHall",
+      targetDir: "west",
+      targetEntry: { x: 140, y: H/2 - 30 },
+      requiredKey: "key-black",
+      open: false
+    });
   });
 
   addRoom("blackHall", "Black Keep", {
@@ -1498,6 +1874,13 @@ function buildLabyrinthLayout(world) {
   }, (room) => {
     addBoundaryWalls(room, { open: { north: true, east: true } });
     room.castle = { color: "#3f6b37", accent: "#d9febc", door: "north", label: "Green Castle", x: 280, y: 140, w: 400, h: 260 };
+    room.gate = new Gate(W/2 - 45, H/2 - 60, 90, 120, {
+      targetRoom: "greenHall",
+      targetDir: "west",
+      targetEntry: { x: 140, y: H/2 - 30 },
+      requiredKey: "key-green",
+      open: false
+    });
   });
 
   addRoom("greenHall", "Emerald Treasury", {
@@ -1509,13 +1892,24 @@ function buildLabyrinthLayout(world) {
   });
 
   addRoom("swamp", "Bog Lanes", {
-    neighbors: { north: "riverbank", east: "dragonLair" },
+    neighbors: { north: "riverbank", east: "dragonLair", south: "swampDepths" },
     bgColor: "#1b2916"
   }, (room) => {
-    addBoundaryWalls(room, { open: { north: true, east: true } });
+    addBoundaryWalls(room, { open: { north: true, east: true, south: true } });
     room.walls.push(
       { x: 200, y: 80, w: 120, h: 300 },
       { x: 520, y: 200, w: 160, h: 200 }
+    );
+  });
+
+  addRoom("swampDepths", "Swamp Depths", {
+    neighbors: { north: "swamp" },
+    bgColor: "#162114"
+  }, (room) => {
+    addBoundaryWalls(room, { open: { north: true } });
+    room.walls.push(
+      { x: 240, y: 120, w: 20, h: 360 },
+      { x: 520, y: 120, w: 20, h: 360 }
     );
   });
 
@@ -1531,12 +1925,32 @@ function buildLabyrinthLayout(world) {
     );
   });
 
+  addRoom("secretNook", "Secret Nook", {
+    neighbors: {},
+    bgColor: "#10141a"
+  }, (room) => {
+    addBoundaryWalls(room, {});
+    room.walls.push(
+      { x: 260, y: 140, w: 20, h: 320 },
+      { x: 520, y: 120, w: 20, h: 360 }
+    );
+  });
+
+  addSecretDoor(world.rooms.greenMaze, { x: 20, y: 80, w: 28, h: 120 }, "secretNook", "east", { x: W - 180, y: H/2 - 20 });
+
   world.addItemToRoom(new Item("sword", 260, 220, 64, 26), "mazeEntry");
-  world.addItemToRoom(new Item("key", 320, H/2 + 30, 40, 24), "meadow");
+  world.addItemToRoom(new Item("bridge", 200, H/2 + 80, 72, 20), "riverbank");
+  world.addItemToRoom(new Item("key-yellow", 320, H/2 + 30, 40, 24), "meadow");
+  world.addItemToRoom(new Item("key-black", 320, H/2 + 20, 40, 24), "royalVault");
+  world.addItemToRoom(new Item("key-green", 300, H/2 - 10, 40, 24), "blackHall");
+  world.addItemToRoom(new Item("key-white", 360, H/2 - 10, 40, 24), "secretNook");
   world.addItemToRoom(new Item("trophy", W - 280, H/2 - 26, 44, 36), "greenHall");
 
-  const dragon = new Dragon(W - 260, H/2 - 32);
-  world.rooms.dragonLair.enemies.push(dragon);
+  world.bat = new Bat(260, 160, "mazeCenter");
+  const dragonFast = new Dragon(W - 260, H/2 - 32, { speed: 220, aggroRange: 900 });
+  const dragonSlow = new Dragon(220, 220, { speed: 140, aggroRange: 700 });
+  world.rooms.dragonLair.enemies.push(dragonFast);
+  world.rooms.swamp.enemies.push(dragonSlow);
 
   world.currentRoomId = START_ROOM_ID;
 }
@@ -1587,7 +2001,7 @@ function buildCatacombsLayout(world) {
       targetRoom: "yellowHall",
       targetDir: "west",
       targetEntry: { x: 120, y: H/2 - 36 },
-      requiredKey: "key",
+      requiredKey: "key-yellow",
       open: false
     });
   });
@@ -1631,20 +2045,42 @@ function buildCatacombsLayout(world) {
   });
 
   addRoom("crypt", "Deep Crypt", {
-    neighbors: { north: "catArchive", south: "catVault" },
+    neighbors: { north: "catArchive", east: "ossuary", south: "catVault" },
     bgColor: "#13121a"
   }, (room) => {
-    addBoundaryWalls(room, { open: { north: true, south: true } });
+    addBoundaryWalls(room, { open: { north: true, east: true, south: true } });
     room.walls.push(
       { x: 360, y: 60, w: 20, h: 460 }
     );
   });
 
+  addRoom("ossuary", "Ossuary", {
+    neighbors: { west: "crypt" },
+    bgColor: "#14141c"
+  }, (room) => {
+    addBoundaryWalls(room, { open: { west: true } });
+    room.walls.push(
+      { x: 260, y: 120, w: 20, h: 360 },
+      { x: 520, y: 120, w: 20, h: 360 }
+    );
+  });
+
   addRoom("catVault", "Vault of Bones", {
-    neighbors: { north: "crypt" },
+    neighbors: { north: "crypt", south: "floodedCavern" },
     bgColor: "#0f0f15"
   }, (room) => {
+    addBoundaryWalls(room, { open: { north: true, south: true } });
+  });
+
+  addRoom("floodedCavern", "Flooded Cavern", {
+    neighbors: { north: "catVault" },
+    bgColor: "#0f141a"
+  }, (room) => {
     addBoundaryWalls(room, { open: { north: true } });
+    room.walls.push(
+      { x: 300, y: 120, w: 20, h: 360 },
+      { x: 520, y: 160, w: 20, h: 320 }
+    );
   });
 
   addRoom("catCross", "Catacomb Crossroads", {
@@ -1698,6 +2134,13 @@ function buildCatacombsLayout(world) {
   }, (room) => {
     addBoundaryWalls(room, { open: { west: true, east: true } });
     room.castle = { color: "#3a3a3a", accent: "#cfcfcf", roof: "#222", door: "west", label: "Black Castle", x: 320, y: 140, w: 360, h: 260 };
+    room.gate = new Gate(W/2 - 45, H/2 - 60, 90, 120, {
+      targetRoom: "blackHall",
+      targetDir: "west",
+      targetEntry: { x: 140, y: H/2 - 30 },
+      requiredKey: "key-black",
+      open: false
+    });
   });
 
   addRoom("blackHall", "Shadow Keep", {
@@ -1717,8 +2160,8 @@ function buildCatacombsLayout(world) {
       targetRoom: "greenHall",
       targetDir: "west",
       targetEntry: { x: 140, y: H/2 - 30 },
-      requiredKey: "key",
-      open: true
+      requiredKey: "key-green",
+      open: false
     });
     room.castle = { color: "#466b3d", accent: "#c4f0ad", roof: "#2d4e29", door: "west", label: "Green Castle", x: 300, y: 150, w: 360, h: 240 };
   });
@@ -1732,12 +2175,30 @@ function buildCatacombsLayout(world) {
     room.castle = { color: "#33522f", accent: "#d4ffbf", roof: "#1f311f", door: "east", label: "Vault", x: 240, y: 140, w: 500, h: 260 };
   });
 
+  addRoom("sealedSanctum", "Sealed Sanctum", {
+    neighbors: {},
+    bgColor: "#111018"
+  }, (room) => {
+    addBoundaryWalls(room, {});
+    room.walls.push(
+      { x: 260, y: 120, w: 20, h: 360 },
+      { x: 520, y: 120, w: 20, h: 360 }
+    );
+  });
+
+  addSecretDoor(world.rooms.catArchive, { x: 20, y: H/2 - 60, w: 28, h: 120 }, "sealedSanctum", "east", { x: W - 180, y: H/2 - 20 });
+
   world.addItemToRoom(new Item("sword", 160, H/2 - 18, 60, 26), "ruins");
-  world.addItemToRoom(new Item("key", W/2 - 20, H/2 - 10, 40, 26), "catVault");
+  world.addItemToRoom(new Item("bridge", 220, H/2 + 80, 72, 20), "catHall");
+  world.addItemToRoom(new Item("key-yellow", 240, H/2 - 20, 40, 24), "riverWatch");
+  world.addItemToRoom(new Item("key-black", 320, H/2 + 20, 40, 24), "yellowHall");
+  world.addItemToRoom(new Item("key-green", 320, H/2 - 10, 40, 24), "blackHall");
+  world.addItemToRoom(new Item("key-white", 360, H/2 - 10, 40, 24), "sealedSanctum");
   world.addItemToRoom(new Item("trophy", W - 260, H/2 - 24, 44, 36), "greenHall");
 
-  const dragonA = new Dragon(W - 260, H/2 - 40);
-  const dragonB = new Dragon(200, 240);
+  world.bat = new Bat(260, 160, "catHall");
+  const dragonA = new Dragon(W - 260, H/2 - 40, { speed: 220, aggroRange: 900 });
+  const dragonB = new Dragon(200, 240, { speed: 140, aggroRange: 700 });
   world.rooms.dragonDen.enemies.push(dragonA);
   world.rooms.marsh.enemies.push(dragonB);
 
@@ -1789,7 +2250,7 @@ function buildHighlandsLayout(world) {
       targetRoom: "yellowHall",
       targetDir: "west",
       targetEntry: { x: 120, y: H/2 - 40 },
-      requiredKey: "key",
+      requiredKey: "key-yellow",
       open: false
     });
   });
@@ -1817,17 +2278,39 @@ function buildHighlandsLayout(world) {
   });
 
   addRoom("harbor", "Abandoned Harbor", {
-    neighbors: { west: "coast" },
+    neighbors: { west: "coast", east: "lighthouse" },
     bgColor: "#102031"
   }, (room) => {
+    addBoundaryWalls(room, { open: { west: true, east: true } });
+  });
+
+  addRoom("lighthouse", "Lighthouse", {
+    neighbors: { west: "harbor" },
+    bgColor: "#0f1a26"
+  }, (room) => {
     addBoundaryWalls(room, { open: { west: true } });
+    room.walls.push(
+      { x: 300, y: 120, w: 20, h: 360 },
+      { x: 520, y: 120, w: 20, h: 360 }
+    );
   });
 
   addRoom("swamp", "Sunken Swamp", {
-    neighbors: { north: "forest", east: "blackEntrance", south: "bogDepths" },
+    neighbors: { north: "forest", west: "mireEdge", east: "blackEntrance", south: "bogDepths" },
     bgColor: "#152515"
   }, (room) => {
-    addBoundaryWalls(room, { open: { north: true, east: true, south: true } });
+    addBoundaryWalls(room, { open: { north: true, west: true, east: true, south: true } });
+  });
+
+  addRoom("mireEdge", "Mire Edge", {
+    neighbors: { east: "swamp" },
+    bgColor: "#111f14"
+  }, (room) => {
+    addBoundaryWalls(room, { open: { east: true } });
+    room.walls.push(
+      { x: 240, y: 120, w: 20, h: 360 },
+      { x: 520, y: 120, w: 20, h: 360 }
+    );
   });
 
   addRoom("bogDepths", "Bog Depths", {
@@ -1847,7 +2330,7 @@ function buildHighlandsLayout(world) {
       targetRoom: "blackHall",
       targetDir: "west",
       targetEntry: { x: 140, y: H/2 - 30 },
-      requiredKey: "key",
+      requiredKey: "key-black",
       open: false
     });
   });
@@ -1869,8 +2352,8 @@ function buildHighlandsLayout(world) {
       targetRoom: "greenHall",
       targetDir: "west",
       targetEntry: { x: 140, y: H/2 - 28 },
-      requiredKey: "key",
-      open: true
+      requiredKey: "key-green",
+      open: false
     });
     room.castle = { color: "#436c38", accent: "#d2feb8", roof: "#264627", door: "west", label: "Green Castle", x: 300, y: 140, w: 360, h: 240 };
   });
@@ -1934,12 +2417,30 @@ function buildHighlandsLayout(world) {
     addBoundaryWalls(room, { open: { north: true } });
   });
 
+  addRoom("hiddenVault", "Hidden Vault", {
+    neighbors: {},
+    bgColor: "#10141a"
+  }, (room) => {
+    addBoundaryWalls(room, {});
+    room.walls.push(
+      { x: 260, y: 120, w: 20, h: 360 },
+      { x: 520, y: 120, w: 20, h: 360 }
+    );
+  });
+
+  addSecretDoor(world.rooms.cavernDepths, { x: W - 36, y: H/2 - 60, w: 28, h: 120 }, "hiddenVault", "west", { x: 140, y: H/2 - 20 });
+
   world.addItemToRoom(new Item("sword", 200, H/2 - 16, 60, 24), "ridge");
-  world.addItemToRoom(new Item("key", W - 220, H/2 - 20, 40, 24), "blackHall");
+  world.addItemToRoom(new Item("bridge", 220, H/2 + 80, 72, 20), "lakePass");
+  world.addItemToRoom(new Item("key-yellow", 220, H/2 + 20, 40, 24), "forest");
+  world.addItemToRoom(new Item("key-black", 320, H/2 + 20, 40, 24), "yellowHall");
+  world.addItemToRoom(new Item("key-green", 300, H/2 - 10, 40, 24), "blackHall");
+  world.addItemToRoom(new Item("key-white", 360, H/2 - 10, 40, 24), "hiddenVault");
   world.addItemToRoom(new Item("trophy", W - 240, H/2 - 24, 44, 36), "towerTop");
 
-  const dragonHigh = new Dragon(240, H/2 - 40);
-  const dragonLow = new Dragon(W - 220, 200);
+  world.bat = new Bat(240, 160, "lakePass");
+  const dragonHigh = new Dragon(240, H/2 - 40, { speed: 220, aggroRange: 900 });
+  const dragonLow = new Dragon(W - 220, 200, { speed: 140, aggroRange: 700 });
   world.rooms.dragonLair.enemies.push(dragonHigh);
   world.rooms.swamp.enemies.push(dragonLow);
 
@@ -1976,7 +2477,7 @@ function buildGauntletLayout(world) {
       targetRoom: "fortHall",
       targetDir: "west",
       targetEntry: { x: 120, y: H/2 - 40 },
-      requiredKey: "key",
+      requiredKey: "key-yellow",
       open: false
     });
   });
@@ -1989,11 +2490,22 @@ function buildGauntletLayout(world) {
   });
 
   addRoom("towerHall", "Tower Hall", {
-    neighbors: { west: "fortHall" },
+    neighbors: { west: "fortHall", east: "eastReach" },
     bgColor: "#322c3d"
   }, (room) => {
-    addBoundaryWalls(room, { open: { west: true } });
+    addBoundaryWalls(room, { open: { west: true, east: true } });
     room.castle = { color: "#4d5f9a", accent: "#dbe4ff", roof: "#273469", door: "east", label: "Sky Tower", x: 260, y: 100, w: 460, h: 300 };
+  });
+
+  addRoom("eastReach", "East Reach", {
+    neighbors: { west: "towerHall" },
+    bgColor: "#2a2d3f"
+  }, (room) => {
+    addBoundaryWalls(room, { open: { west: true } });
+    room.walls.push(
+      { x: 300, y: 120, w: 20, h: 360 },
+      { x: 520, y: 120, w: 20, h: 360 }
+    );
   });
 
   addRoom("tangle", "Thorn Tangle", {
@@ -2056,7 +2568,7 @@ function buildGauntletLayout(world) {
       targetRoom: "blackHall",
       targetDir: "west",
       targetEntry: { x: 140, y: H/2 - 30 },
-      requiredKey: "key",
+      requiredKey: "key-black",
       open: false
     });
   });
@@ -2090,10 +2602,21 @@ function buildGauntletLayout(world) {
   });
 
   addRoom("dragonAerie", "Dragon Aerie", {
-    neighbors: { north: "shadowGlade", west: "lavaBridge", east: "towerHall" },
+    neighbors: { north: "shadowGlade", west: "lavaBridge", east: "towerHall", south: "ashWastes" },
     bgColor: "#330f0f"
   }, (room) => {
-    addBoundaryWalls(room, { open: { north: true, west: true, east: true } });
+    addBoundaryWalls(room, { open: { north: true, west: true, east: true, south: true } });
+  });
+
+  addRoom("ashWastes", "Ash Wastes", {
+    neighbors: { north: "dragonAerie" },
+    bgColor: "#2b0f12"
+  }, (room) => {
+    addBoundaryWalls(room, { open: { north: true } });
+    room.walls.push(
+      { x: 240, y: 120, w: 20, h: 360 },
+      { x: 520, y: 140, w: 20, h: 340 }
+    );
   });
 
   addRoom("greenEntrance", "Verdant Gate", {
@@ -2106,8 +2629,8 @@ function buildGauntletLayout(world) {
       targetRoom: "greenHall",
       targetDir: "west",
       targetEntry: { x: 140, y: H/2 - 30 },
-      requiredKey: "key",
-      open: true
+      requiredKey: "key-green",
+      open: false
     });
   });
 
@@ -2119,14 +2642,32 @@ function buildGauntletLayout(world) {
     addBoundaryWalls(room, { open: { west: true } });
   });
 
+  addRoom("lostVault", "Lost Vault", {
+    neighbors: {},
+    bgColor: "#121118"
+  }, (room) => {
+    addBoundaryWalls(room, {});
+    room.walls.push(
+      { x: 260, y: 120, w: 20, h: 360 },
+      { x: 520, y: 120, w: 20, h: 360 }
+    );
+  });
+
+  addSecretDoor(world.rooms.catacombDepths, { x: 20, y: H/2 - 60, w: 28, h: 120 }, "lostVault", "east", { x: W - 180, y: H/2 - 20 });
+
   world.addItemToRoom(new Item("sword", 220, H/2 - 18, 60, 24), "fields");
-  world.addItemToRoom(new Item("key", W - 220, H/2 - 20, 40, 24), "obsidianHall");
+  world.addItemToRoom(new Item("bridge", 220, H/2 + 80, 72, 20), "riverSouth");
+  world.addItemToRoom(new Item("key-yellow", 220, H/2 + 20, 40, 24), "tangle");
+  world.addItemToRoom(new Item("key-black", W - 220, H/2 - 20, 40, 24), "obsidianHall");
+  world.addItemToRoom(new Item("key-green", 300, H/2 - 10, 40, 24), "blackHall");
+  world.addItemToRoom(new Item("key-white", 360, H/2 - 10, 40, 24), "lostVault");
   world.addItemToRoom(new Item("trophy", W - 240, H/2 - 26, 44, 36), "towerHall");
 
-  const dragonOne = new Dragon(W - 280, 180);
-  const dragonTwo = new Dragon(200, H/2 - 32);
+  world.bat = new Bat(260, 160, "delta");
+  const dragonOne = new Dragon(W - 280, 180, { speed: 220, aggroRange: 900 });
+  const dragonTwo = new Dragon(200, H/2 - 32, { speed: 140, aggroRange: 700 });
   world.rooms.dragonAerie.enemies.push(dragonOne);
-  world.rooms.delta.enemies.push(dragonTwo);
+  world.rooms.ashWastes.enemies.push(dragonTwo);
 
   world.currentRoomId = START_ROOM_ID;
 }
@@ -2142,6 +2683,7 @@ const state = {
 
 const _pressed = new Set();
 addEventListener("keydown", (e) => {
+  if (!shouldCaptureKey(e)) return;
   const k = e.key.toLowerCase();
   if (!_pressed.has(k)) _pressed.add(k);
 });
@@ -2205,18 +2747,34 @@ function loop(ts) {
   requestAnimationFrame(loop);
 }
 
+let lastHudState = "";
 function renderHUD() {
   const hud = document.getElementById("hud");
+  if (!hud) return;
+  const room = WORLD.current();
+  const holding = WORLD.player.holding ? itemDisplayName(WORLD.player.holding.kind) : "";
+  const gateState = room.gate ? (room.gate.open ? "Open" : "Closed") : "";
+  const layoutName = WORLD.currentLayoutName || "";
+  const nextState = [
+    activeLevelName,
+    activeKidName,
+    layoutName,
+    room.name,
+    holding,
+    gateState
+  ].join("|");
+  if (nextState === lastHudState) return;
+  lastHudState = nextState;
   hud.innerHTML = "";
   const tag = (t)=>{ const el=document.createElement("div"); el.className="tag"; el.textContent=t; return el; };
   hud.append(tag(`Level: ${activeLevelName}`));
   hud.append(tag(`Kid: ${activeKidName}`));
-  if (WORLD.currentLayoutName) {
-    hud.append(tag(`Layout: ${WORLD.currentLayoutName}`));
+  if (layoutName) {
+    hud.append(tag(`Layout: ${layoutName}`));
   }
-  hud.append(tag(`Room: ${WORLD.current().name}`));
-  if (WORLD.player.holding) hud.append(tag(`Holding: ${WORLD.player.holding.kind}`));
-  if (WORLD.current().gate) hud.append(tag(`Gate: ${WORLD.current().gate.open ? "Open" : "Closed"}`));
+  hud.append(tag(`Room: ${room.name}`));
+  if (holding) hud.append(tag(`Holding: ${holding}`));
+  if (gateState) hud.append(tag(`Gate: ${gateState}`));
 }
 
 /* =========================================================
