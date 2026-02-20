@@ -278,6 +278,41 @@ function rectsTouchOrOverlap(a, b, pad=0) {
 function rectsOverlap(a, b) {
   return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 }
+function findSafeItemDropPosition(item, room, preferredX, preferredY) {
+  const clampX = (x) => clamp(x, 8, W - item.w - 8);
+  const clampY = (y) => clamp(y, 8, H - item.h - 8);
+  const solids = room?.solidRects ? room.solidRects() : [];
+  const isBlocked = (x, y) => {
+    const rect = { x, y, w: item.w, h: item.h };
+    for (const s of solids) {
+      if (rectsOverlap(rect, s)) return true;
+    }
+    return false;
+  };
+
+  const startX = clampX(preferredX);
+  const startY = clampY(preferredY);
+  if (!isBlocked(startX, startY)) {
+    return { x: startX, y: startY };
+  }
+
+  const step = 24;
+  const maxRadius = Math.max(W, H);
+  for (let radius = step; radius <= maxRadius; radius += step) {
+    for (let dy = -radius; dy <= radius; dy += step) {
+      for (let dx = -radius; dx <= radius; dx += step) {
+        if (Math.abs(dx) !== radius && Math.abs(dy) !== radius) continue;
+        const x = clampX(startX + dx);
+        const y = clampY(startY + dy);
+        if (!isBlocked(x, y)) {
+          return { x, y };
+        }
+      }
+    }
+  }
+
+  return null;
+}
 function drawRect(r, color="#fff") {
   ctx.fillStyle = color; ctx.fillRect(r.x, r.y, r.w, r.h);
 }
@@ -479,7 +514,8 @@ const ASSET_CONFIG = {
       dragonDead: "assets/common/dragon-dead.png",
       key: "assets/common/key.png",
       sword: "assets/common/sword.png",
-      trophy: "assets/common/trophy.png"
+      trophy: "assets/common/trophy.png",
+      bat: "assets/common/bat.svg"
     }
   },
   isla: {
@@ -490,7 +526,8 @@ const ASSET_CONFIG = {
       dragonDead: "assets/common/dragon-dead.png",
       key: "assets/common/key.png",
       sword: "assets/common/sword.png",
-      trophy: "assets/common/trophy.png"
+      trophy: "assets/common/trophy.png",
+      bat: "assets/common/bat.svg"
     }
   },
   kylie: {
@@ -501,7 +538,8 @@ const ASSET_CONFIG = {
       dragonDead: "assets/common/dragon-dead.png",
       key: "assets/common/key.png",
       sword: "assets/common/sword.png",
-      trophy: "assets/common/trophy.png"
+      trophy: "assets/common/trophy.png",
+      bat: "assets/common/bat.svg"
     }
   }
 };
@@ -529,7 +567,7 @@ let activeKidId = (queryKid && ASSET_CONFIG[queryKid]) ? queryKid : DEFAULT_KID_
 let activeKidName = ASSET_CONFIG[activeKidId]?.displayName || "Default Hero";
 let activeLevelId = (queryLevel && LEVEL_CONFIG[queryLevel]) ? queryLevel : DEFAULT_LEVEL_ID;
 let activeLevelName = LEVEL_CONFIG[activeLevelId]?.label || LEVEL_CONFIG[DEFAULT_LEVEL_ID].label;
-const IMAGES = { player: null, dragon: null, dragonDead: null, key: null, sword: null, trophy: null };
+const IMAGES = { player: null, dragon: null, dragonDead: null, key: null, sword: null, trophy: null, bat: null };
 const ITEM_DEFS = {
   sword: { label: "Sword", color: "#dfe6ef", imageKey: "sword" },
   trophy: { label: "Trophy", color: "#f7b500", imageKey: "trophy" },
@@ -871,22 +909,26 @@ class Bat {
     if (!this.carrying) return;
     this.dropTimer -= dt;
     if (this.dropTimer > 0) return;
-    this.dropTimer = 2 + Math.random() * 4;
+    const room = world.rooms[this.roomId];
+    if (!room) return;
+    const target = findSafeItemDropPosition(
+      this.carrying,
+      room,
+      this.x + this.w + 6,
+      this.y + (this.h - this.carrying.h)/2
+    );
+    if (!target) return;
     const it = this.carrying;
     this.carrying = null;
-    it.x = clamp(this.x + this.w + 6, 8, W - it.w - 8);
-    it.y = clamp(this.y + (this.h - it.h)/2, 8, H - it.h - 8);
+    this.dropTimer = 2 + Math.random() * 4;
+    it.x = target.x;
+    it.y = target.y;
     world.addItemToRoom(it, this.roomId);
   }
   draw() {
     const r = this.rect();
-    drawRect(r, "#6c7a89");
+    drawImageOrFallback(IMAGES.bat, r, "#6c7a89", "BAT");
     outlineRect(r, "#2b3038");
-    ctx.fillStyle = "#1b1f27";
-    ctx.font = "bold 10px system-ui, sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText("BAT", r.x + r.w/2, r.y + r.h/2);
     if (this.carrying && this.roomId === WORLD.currentRoomId) {
       const it = this.carrying;
       const cx = r.x + r.w/2;
