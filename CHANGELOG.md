@@ -8,6 +8,8 @@
 - Added persisted accessibility settings: high-contrast UI mode and colorblind gate symbols.
 - Added a debug overlay (button + keybind) with hitbox rendering and live runtime state.
 - Added periodic runtime item recovery to relocate blocked/unreachable items.
+- Added `tools/gameplay_regressions.py` to enforce gameplay invariants across all layouts.
+- Restored missing start-room pedestals in Classic, Shuffled, and Labyrinth layouts.
 - Split browser code into JS modules (`js/game.js`, `js/constants.js`, `js/content-config.js`) and switched `index.html` to module loading.
 - Added `tools/qa_checks.py` for dependency-free lint/smoke checks and documented it in README.
 - Added `tools/layout_checks.py` for static map connectivity/invariant validation across all layout builders.

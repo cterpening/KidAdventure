@@ -27,6 +27,7 @@ Kid Adventure is a browser-based tribute to the Atari 2600 classic. Pick a kid-s
 - Run `python tools/qa_checks.py` to execute lightweight lint/smoke checks.
 - The check validates core file structure and that all assets referenced in `ASSET_CONFIG` exist on disk.
 - Run `python tools/layout_checks.py` to validate layout graph integrity (neighbor targets, start-room reachability, and secret-door targets).
+- Run `python tools/gameplay_regressions.py` to validate gameplay invariants (keys/gates/dragons/trophy/pedestal and seeded randomness wiring).
 
 ## Persistence
 - The game saves selected kid, level, seed, and win counters in `localStorage` (`kidAdventure.save.v1`).

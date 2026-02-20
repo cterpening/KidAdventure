@@ -1471,6 +1471,7 @@ function buildClassicLayout(world) {
     bgColor: "#162316"
   }, (room) => {
     addBoundaryWalls(room, { open: { north: true, west: true, east: true, south: true } });
+    room.pedestal = { x: 56, y: H/2 - 24, w: 112, h: 20 };
     room.walls.push(
       { x: 200, y: 140, w: 20, h: 320 },
       { x: 360, y: 140, w: 20, h: 320 }
@@ -1719,6 +1720,7 @@ function buildShuffledLayout(world) {
     bgColor: "#1a2416"
   }, (room) => {
     addBoundaryWalls(room, { open: { north: true, east: true, south: true } });
+    room.pedestal = { x: 56, y: H/2 - 24, w: 112, h: 20 };
     room.walls.push(
       { x: 180, y: 160, w: 20, h: 280 },
       { x: 420, y: 120, w: 20, h: 360 },
@@ -1935,6 +1937,7 @@ function buildLabyrinthLayout(world) {
     bgColor: "#1f301b"
   }, (room) => {
     addBoundaryWalls(room, { open: { east: true, south: true } });
+    room.pedestal = { x: 56, y: H/2 - 24, w: 112, h: 20 };
     room.walls.push(
       { x: 260, y: 160, w: 20, h: 260 },
       { x: 520, y: 120, w: 20, h: 320 }
