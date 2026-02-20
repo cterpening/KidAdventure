@@ -317,17 +317,121 @@ function createRoomAdder(world) {
   };
 }
 
+const SAVE_KEY = "kidAdventure.save.v1";
+
+function safeLoadSave() {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return {};
+    return parsed;
+  } catch (_err) {
+    return {};
+  }
+}
+
+function safeSaveSave(data) {
+  try {
+    localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+  } catch (_err) {
+    // ignore storage failures (private mode / quota)
+  }
+}
+
+function autoSeed() {
+  if (globalThis.crypto?.getRandomValues) {
+    const arr = new Uint32Array(1);
+    globalThis.crypto.getRandomValues(arr);
+    return arr[0].toString(16);
+  }
+  return Date.now().toString(16);
+}
+
+function normalizeSeed(seed) {
+  const str = String(seed ?? "").trim();
+  return str || autoSeed();
+}
+
+function hashSeed(seed) {
+  let h = 2166136261;
+  for (let i = 0; i < seed.length; i++) {
+    h ^= seed.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function createSeededRng(seed) {
+  let state = hashSeed(seed) || 1;
+  return function next() {
+    state = Math.imul(state ^ (state >>> 15), 1 | state);
+    state ^= state + Math.imul(state ^ (state >>> 7), 61 | state);
+    return ((state ^ (state >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 /* =========================================================
    Assets (loaded from kid-specific directories)
    ========================================================= */
 const searchParams = new URLSearchParams(location.search);
+const savedState = safeLoadSave();
 const queryKid = searchParams.get("kid");
 const queryLevel = searchParams.get("level");
+const querySeed = searchParams.get("seed");
+const savedKid = typeof savedState.kidId === "string" ? savedState.kidId : "";
+const savedLevel = typeof savedState.levelId === "string" ? savedState.levelId : "";
+const savedSeed = typeof savedState.seed === "string" ? savedState.seed : "";
 let activeKidId = (queryKid && ASSET_CONFIG[queryKid]) ? queryKid : DEFAULT_KID_ID;
+if ((!queryKid || !ASSET_CONFIG[queryKid]) && savedKid && ASSET_CONFIG[savedKid]) {
+  activeKidId = savedKid;
+}
 let activeKidName = ASSET_CONFIG[activeKidId]?.displayName || "Default Hero";
 let activeLevelId = (queryLevel && LEVEL_CONFIG[queryLevel]) ? queryLevel : DEFAULT_LEVEL_ID;
+if ((!queryLevel || !LEVEL_CONFIG[queryLevel]) && savedLevel && LEVEL_CONFIG[savedLevel]) {
+  activeLevelId = savedLevel;
+}
 let activeLevelName = LEVEL_CONFIG[activeLevelId]?.label || LEVEL_CONFIG[DEFAULT_LEVEL_ID].label;
+let activeSeed = normalizeSeed(querySeed || savedSeed);
+let rng = createSeededRng(activeSeed);
+let totalWins = Number.isFinite(savedState.totalWins) ? Number(savedState.totalWins) : 0;
+const winsByProfile = (savedState.winsByProfile && typeof savedState.winsByProfile === "object") ? savedState.winsByProfile : {};
 const IMAGES = { player: null, dragon: null, dragonDead: null, key: null, sword: null, trophy: null, bat: null };
+
+function random() {
+  return rng();
+}
+
+function saveProgress() {
+  safeSaveSave({
+    kidId: activeKidId,
+    levelId: activeLevelId,
+    seed: activeSeed,
+    totalWins,
+    winsByProfile
+  });
+}
+
+function winsForCurrentProfile() {
+  const key = `${activeKidId}:${activeLevelId}`;
+  return Number.isFinite(winsByProfile[key]) ? Number(winsByProfile[key]) : 0;
+}
+
+function recordWinProgress() {
+  if (state.hasWonThisRun) return;
+  state.hasWonThisRun = true;
+  const key = `${activeKidId}:${activeLevelId}`;
+  winsByProfile[key] = winsForCurrentProfile() + 1;
+  totalWins += 1;
+  saveProgress();
+}
+
+function reseed(seed) {
+  activeSeed = normalizeSeed(seed);
+  rng = createSeededRng(activeSeed);
+  syncQueryParams();
+  saveProgress();
+}
 function normalizeKeyKind(kind) {
   if (kind === "key") return "key-yellow";
   return kind;
@@ -380,6 +484,7 @@ function populateKidSelector() {
     activeKidId = nextId;
     loadKidAssets(activeKidId);
     syncQueryParams();
+    saveProgress();
     const label = ASSET_CONFIG[activeKidId].displayName || activeKidId;
     showToast(`Now playing as ${label}`);
     WORLD.resetPlayerToStart(false);
@@ -403,6 +508,7 @@ function populateLevelSelector() {
     activeLevelId = nextId;
     activeLevelName = LEVEL_CONFIG[activeLevelId]?.label || LEVEL_CONFIG[DEFAULT_LEVEL_ID].label;
     syncQueryParams();
+    saveProgress();
     showToast(`Level set to ${activeLevelName}`);
     WORLD.resetAll();
   });
@@ -412,6 +518,7 @@ function syncQueryParams() {
   const url = new URL(window.location.href);
   if (activeKidId === DEFAULT_KID_ID) url.searchParams.delete("kid"); else url.searchParams.set("kid", activeKidId);
   if (activeLevelId === DEFAULT_LEVEL_ID) url.searchParams.delete("level"); else url.searchParams.set("level", activeLevelId);
+  if (activeSeed) url.searchParams.set("seed", activeSeed);
   history.replaceState(null, "", url);
 }
 
@@ -426,6 +533,7 @@ loadKidAssets(activeKidId);
 populateKidSelector();
 populateLevelSelector();
 updateAdventureTitle();
+syncQueryParams();
 
 /* =========================================================
    World + Rooms (2x2 grid)
@@ -519,10 +627,10 @@ class Dragon {
       // idle drift with occasional turns
       this.wanderTimer -= dt;
       if (this.wanderTimer <= 0) {
-        const angle = Math.random() * Math.PI * 2;
+        const angle = random() * Math.PI * 2;
         this.wanderDir.x = Math.cos(angle);
         this.wanderDir.y = Math.sin(angle);
-        this.wanderTimer = 1 + Math.random() * 2;
+        this.wanderTimer = 1 + random() * 2;
       }
       vx = this.wanderDir.x * 60;
       vy = this.wanderDir.y * 60;
@@ -565,8 +673,8 @@ class Bat {
     this.carrying = null;
     this.wanderTimer = 0;
     this.wanderDir = { x: 0, y: 0 };
-    this.travelTimer = 3 + Math.random() * 4;
-    this.dropTimer = 2 + Math.random() * 3;
+    this.travelTimer = 3 + random() * 4;
+    this.dropTimer = 2 + random() * 3;
   }
   rect(){ return this; }
   update(dt, world) {
@@ -575,10 +683,10 @@ class Bat {
 
     this.travelTimer -= dt;
     if (this.travelTimer <= 0) {
-      this.travelTimer = 3 + Math.random() * 5;
+      this.travelTimer = 3 + random() * 5;
       const exits = Object.entries(room.neighbors).filter(([dir, id]) => id);
       if (exits.length) {
-        const [dir, nextId] = exits[Math.floor(Math.random() * exits.length)];
+        const [dir, nextId] = exits[Math.floor(random() * exits.length)];
         this._moveToRoom(nextId, dir);
         return;
       }
@@ -586,10 +694,10 @@ class Bat {
 
     this.wanderTimer -= dt;
     if (this.wanderTimer <= 0) {
-      const angle = Math.random() * Math.PI * 2;
+      const angle = random() * Math.PI * 2;
       this.wanderDir.x = Math.cos(angle);
       this.wanderDir.y = Math.sin(angle);
-      this.wanderTimer = 0.7 + Math.random() * 1.2;
+      this.wanderTimer = 0.7 + random() * 1.2;
     }
     this.x += this.wanderDir.x * this.speed * dt;
     this.y += this.wanderDir.y * this.speed * dt;
@@ -669,7 +777,7 @@ class Bat {
     if (!target) return;
     const it = this.carrying;
     this.carrying = null;
-    this.dropTimer = 2 + Math.random() * 4;
+    this.dropTimer = 2 + random() * 4;
     it.x = target.x;
     it.y = target.y;
     world.addItemToRoom(it, this.roomId);
@@ -930,7 +1038,7 @@ const WORLD = {
     const idsToUse = variantIds.length ? variantIds : fallbackIds;
     let pool = idsToUse.filter(id => id !== this.currentLayoutId);
     if (!pool.length) pool = idsToUse;
-    const choiceId = pool[Math.floor(Math.random() * pool.length)];
+    const choiceId = pool[Math.floor(random() * pool.length)];
     const variant = LAYOUT_VARIANTS[choiceId];
     this.currentLayoutId = choiceId;
     this.currentLayoutName = `${level.label} · ${variant.label}`;
@@ -1011,6 +1119,7 @@ const WORLD = {
       const ped = room.pedestal;
       for (const itm of room.items) {
         if (itm.kind === "trophy" && itm.alive && !itm.heldBy && rectsOverlap(itm, ped)) {
+          recordWinProgress();
           state.winTimer = Math.max(state.winTimer, 0.001);
         }
       }
@@ -1045,9 +1154,11 @@ const WORLD = {
     this.buildRandomLayout();
     this.transitionTo(START_ROOM_ID, "default", { silent: true });
     state.winTimer = 0;
+    state.hasWonThisRun = false;
     if (this.currentLayoutName) {
       showToast(`Layout: ${this.currentLayoutName}`, 2000);
     }
+    saveProgress();
   }
 };
 
@@ -2466,7 +2577,8 @@ function buildGauntletLayout(world) {
 
 const state = {
   paused: false,
-  winTimer: 0
+  winTimer: 0,
+  hasWonThisRun: false
 };
 
 /* =========================================================
@@ -2545,13 +2657,17 @@ function renderHUD() {
   const holding = WORLD.player.holding ? itemDisplayName(WORLD.player.holding.kind) : "";
   const gateState = room.gate ? (room.gate.open ? "Open" : "Closed") : "";
   const layoutName = WORLD.currentLayoutName || "";
+  const profileWins = winsForCurrentProfile();
   const nextState = [
     activeLevelName,
     activeKidName,
+    activeSeed,
     layoutName,
     room.name,
     holding,
-    gateState
+    gateState,
+    profileWins,
+    totalWins
   ].join("|");
   if (nextState === lastHudState) return;
   lastHudState = nextState;
@@ -2559,10 +2675,12 @@ function renderHUD() {
   const tag = (t)=>{ const el=document.createElement("div"); el.className="tag"; el.textContent=t; return el; };
   hud.append(tag(`Level: ${activeLevelName}`));
   hud.append(tag(`Kid: ${activeKidName}`));
+  hud.append(tag(`Seed: ${activeSeed}`));
   if (layoutName) {
     hud.append(tag(`Layout: ${layoutName}`));
   }
   hud.append(tag(`Room: ${room.name}`));
+  hud.append(tag(`Wins: ${profileWins} (Total ${totalWins})`));
   if (holding) hud.append(tag(`Holding: ${holding}`));
   if (gateState) hud.append(tag(`Gate: ${gateState}`));
 }
@@ -2618,3 +2736,4 @@ function setupTouchControls() {
 WORLD.resetAll();
 setupTouchControls();
 requestAnimationFrame((t)=>{ last=t; requestAnimationFrame(loop); });
+

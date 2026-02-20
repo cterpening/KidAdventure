@@ -9,6 +9,7 @@ Kid Adventure is a browser-based tribute to the Atari 2600 classic. Pick a kid-s
 - The bridge lets you pass through walls while you carry it.
 - The bat steals items and moves them between rooms, so expect surprises.
 - Defeat dragons with the sword, then bring the trophy back to the start pedestal.
+- Add `?seed=<value>` to the URL for deterministic layout/enemy randomness during debugging.
 
 ## Custom Kid Art
 - Drop PNGs or JPGs into `assets/kids/<kidId>/` named `player.png`.
@@ -25,6 +26,9 @@ Kid Adventure is a browser-based tribute to the Atari 2600 classic. Pick a kid-s
 - Run `python tools/qa_checks.py` to execute lightweight lint/smoke checks.
 - The check validates core file structure and that all assets referenced in `ASSET_CONFIG` exist on disk.
 - Run `python tools/layout_checks.py` to validate layout graph integrity (neighbor targets, start-room reachability, and secret-door targets).
+
+## Persistence
+- The game saves selected kid, level, seed, and win counters in `localStorage` (`kidAdventure.save.v1`).
 
 ## Code Layout
 - `index.html` contains markup/styles and loads the game via `js/game.js`.

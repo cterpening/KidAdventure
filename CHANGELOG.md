@@ -1,6 +1,8 @@
 # Changelog
 
 ## 2026-02-20
+- Added deterministic RNG support via `?seed=<value>` and routed gameplay randomness through a seeded generator.
+- Added `localStorage` persistence for kid/level/seed selection and win counters.
 - Split browser code into JS modules (`js/game.js`, `js/constants.js`, `js/content-config.js`) and switched `index.html` to module loading.
 - Added `tools/qa_checks.py` for dependency-free lint/smoke checks and documented it in README.
 - Added `tools/layout_checks.py` for static map connectivity/invariant validation across all layout builders.
