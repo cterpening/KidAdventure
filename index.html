@@ -218,6 +218,8 @@ ctx.imageSmoothingEnabled = false;
 
 const keys = new Set();
 const held = (k) => keys.has(k);
+const _pressed = new Set();
+const _touchActions = { interact: false, drop: false };
 const KEY_CAPTURE_TAGS = new Set(["INPUT", "SELECT", "TEXTAREA", "BUTTON"]);
 const PREVENT_KEYS = new Set(["arrowup", "arrowdown", "arrowleft", "arrowright", " "]);
 function shouldCaptureKey(e) {
@@ -243,6 +245,20 @@ const touchState = {
   left: false,
   right: false
 };
+function clearInputState() {
+  keys.clear();
+  _pressed.clear();
+  touchState.up = false;
+  touchState.down = false;
+  touchState.left = false;
+  touchState.right = false;
+  _touchActions.interact = false;
+  _touchActions.drop = false;
+}
+addEventListener("blur", clearInputState);
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) clearInputState();
+});
 
 function heldDirection(dir) {
   if (touchState[dir]) return true;
@@ -2724,7 +2740,6 @@ const state = {
    Input edge detection (pressed once)
    ========================================================= */
 
-const _pressed = new Set();
 addEventListener("keydown", (e) => {
   if (!shouldCaptureKey(e)) return;
   const k = e.key.toLowerCase();
@@ -2736,7 +2751,6 @@ function wasPressed(k) {
   return false;
 }
 
-const _touchActions = { interact: false, drop: false };
 function touchActionPressed(action) {
   if (_touchActions[action]) {
     _touchActions[action] = false;
