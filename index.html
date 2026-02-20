@@ -2527,10 +2527,10 @@ function buildGauntletLayout(world) {
   });
 
   addRoom("fortGate", "Fortress Gate", {
-    neighbors: { west: "fields", east: "fortHall", south: "cliffPass" },
+    neighbors: { west: "fields", east: "fortHall" },
     bgColor: "#2f261d"
   }, (room) => {
-    addBoundaryWalls(room, { open: { west: true, east: true, south: true } });
+    addBoundaryWalls(room, { open: { west: true, east: true } });
     room.castle = { color: "#e4c36d", accent: "#fff4ab", roof: "#b07c36", door: "west", label: "Fortress", x: 320, y: 110, w: 360, h: 260 };
     room.gate = new Gate(W/2 - 45, H/2 - 60, 90, 120, {
       targetRoom: "fortHall",

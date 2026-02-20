@@ -24,6 +24,7 @@ Kid Adventure is a browser-based tribute to the Atari 2600 classic. Pick a kid-s
 ## Quality Checks
 - Run `python tools/qa_checks.py` to execute lightweight lint/smoke checks.
 - The check validates core file structure and that all assets referenced in `ASSET_CONFIG` exist on disk.
+- Run `python tools/layout_checks.py` to validate layout graph integrity (neighbor targets, start-room reachability, and secret-door targets).
 
 ## Changelog
 - **2025-11-19** – Added multi-kid selector, custom art manifest, and virtual touch controls.

@@ -2,6 +2,8 @@
 
 ## 2026-02-20
 - Added `tools/qa_checks.py` for dependency-free lint/smoke checks and documented it in README.
+- Added `tools/layout_checks.py` for static map connectivity/invariant validation across all layout builders.
+- Fixed a broken Gauntlet room neighbor reference (`fortGate.south -> cliffPass`) by removing the invalid exit.
 - Prevented bat-stolen items from being dropped into walls or closed gates by selecting the nearest safe drop position.
 - Updated world-state checks to re-read the active room after player transitions, fixing stale-room combat/win edge cases.
 - Added blur/visibility input reset so keyboard/touch state cannot stick after tab or window focus changes.
