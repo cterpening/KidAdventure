@@ -1,9 +1,11 @@
 # Changelog
 
 ## 2026-02-20
+- Added `tools/qa_checks.py` for dependency-free lint/smoke checks and documented it in README.
 - Prevented bat-stolen items from being dropped into walls or closed gates by selecting the nearest safe drop position.
 - Updated world-state checks to re-read the active room after player transitions, fixing stale-room combat/win edge cases.
 - Added blur/visibility input reset so keyboard/touch state cannot stick after tab or window focus changes.
+- Corrected asset documentation to match shared common sprites with optional per-kid overrides.
 
 ## 2025-11-21
 - Added colored keys (yellow/black/green) plus a white master key and updated gates to match.

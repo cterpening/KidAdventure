@@ -13,6 +13,7 @@ Kid Adventure is a browser-based tribute to the Atari 2600 classic. Pick a kid-s
 ## Custom Kid Art
 - Drop PNGs or JPGs into `assets/kids/<kidId>/` named `player.png`.
 - Shared art (dragon, dragon-dead, key, sword, trophy) lives under `assets/common/`.
+- To override shared art for a specific kid, point that kid's `ASSET_CONFIG` paths at kid-local files.
 - Register new kids or swap art by editing `ASSET_CONFIG` in `index.html`.
 
 ## Deployment
