@@ -1,6 +1,7 @@
 # Changelog
 
 ## 2026-02-20
+- Split browser code into JS modules (`js/game.js`, `js/constants.js`, `js/content-config.js`) and switched `index.html` to module loading.
 - Added `tools/qa_checks.py` for dependency-free lint/smoke checks and documented it in README.
 - Added `tools/layout_checks.py` for static map connectivity/invariant validation across all layout builders.
 - Added a non-reciprocal-neighbor allowlist to `tools/layout_checks.py` so intentional one-way paths do not hide new warnings.

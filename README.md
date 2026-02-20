@@ -26,6 +26,12 @@ Kid Adventure is a browser-based tribute to the Atari 2600 classic. Pick a kid-s
 - The check validates core file structure and that all assets referenced in `ASSET_CONFIG` exist on disk.
 - Run `python tools/layout_checks.py` to validate layout graph integrity (neighbor targets, start-room reachability, and secret-door targets).
 
+## Code Layout
+- `index.html` contains markup/styles and loads the game via `js/game.js`.
+- `js/constants.js` contains shared canvas constants.
+- `js/content-config.js` contains kid/level/item config data.
+- `js/game.js` contains runtime systems (engine, entities, maps, UI integration).
+
 ## Changelog
 - **2025-11-19** – Added multi-kid selector, custom art manifest, and virtual touch controls.
 - **2025-11-19** – Implemented multi-room layouts, dragon AI, castle silhouettes, and random layout rotation.

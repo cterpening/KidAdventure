@@ -10,7 +10,7 @@ import sys
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-INDEX_HTML = REPO_ROOT / "index.html"
+GAME_JS = REPO_ROOT / "js" / "game.js"
 OPPOSITE_DIR = {"north": "south", "south": "north", "east": "west", "west": "east"}
 # Intentional one-way links/gate-adjacent flows that should not fail warning scans.
 ALLOWED_NON_RECIPROCAL: set[tuple[str, str, str, str]] = {
@@ -277,13 +277,13 @@ def reachable_rooms(graph: dict[str, set[str]], start_room: str) -> set[str]:
 
 
 def main() -> int:
-    text = read_text(INDEX_HTML)
+    text = read_text(GAME_JS)
     errors: list[str] = []
     warnings: list[str] = []
 
     start_match = re.search(r'const\s+START_ROOM_ID\s*=\s*"([^"]+)";', text)
     if not start_match:
-        print("FAIL: Could not parse START_ROOM_ID from index.html.")
+        print("FAIL: Could not parse START_ROOM_ID from js/game.js.")
         return 1
     start_room = start_match.group(1)
 
