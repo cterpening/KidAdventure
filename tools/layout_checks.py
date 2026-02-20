@@ -12,6 +12,19 @@ import sys
 REPO_ROOT = Path(__file__).resolve().parents[1]
 INDEX_HTML = REPO_ROOT / "index.html"
 OPPOSITE_DIR = {"north": "south", "south": "north", "east": "west", "west": "east"}
+# Intentional one-way links/gate-adjacent flows that should not fail warning scans.
+ALLOWED_NON_RECIPROCAL: set[tuple[str, str, str, str]] = {
+    ("buildClassicLayout", "yellowHall", "west", "yellowCourtyard"),
+    ("buildShuffledLayout", "yellowHall", "west", "yellowCourtyard"),
+    ("buildShuffledLayout", "riverbank", "south", "swamp"),
+    ("buildShuffledLayout", "swamp", "west", "riverbank"),
+    ("buildCatacombsLayout", "yellowHall", "west", "yellowCourtyard"),
+    ("buildCatacombsLayout", "dragonDen", "east", "greenEntrance"),
+    ("buildCatacombsLayout", "obsidianPass", "south", "blackHall"),
+    ("buildHighlandsLayout", "yellowHall", "west", "yellowCourtyard"),
+    ("buildHighlandsLayout", "bogDepths", "east", "blackEntrance"),
+    ("buildGauntletLayout", "dragonAerie", "east", "towerHall"),
+}
 
 
 def read_text(path: Path) -> str:
@@ -313,6 +326,8 @@ def main() -> int:
                 opposite = OPPOSITE_DIR[direction]
                 target_back = rooms[target].get(opposite)
                 if target_back != room_id:
+                    if (builder, room_id, direction, target) in ALLOWED_NON_RECIPROCAL:
+                        continue
                     warnings.append(
                         f"{builder}: Non-reciprocal neighbor {room_id}.{direction} -> {target} "
                         f"(expected {target}.{opposite} -> {room_id}, found {target_back!r})."
