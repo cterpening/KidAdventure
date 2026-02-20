@@ -1243,10 +1243,11 @@ const WORLD = {
     }
   },
   update(dt) {
-    const room = this.current();
+    let room = this.current();
     for (const d of room.enemies) d.update(dt, room, this.player);
     if (this.bat) this.bat.update(dt, this);
     this.player.update(dt, room);
+    room = this.current();
 
     if (this.player.holding && this.player.holding.kind === "sword") {
       for (const e of room.enemies) {

@@ -2,6 +2,7 @@
 
 ## 2026-02-20
 - Prevented bat-stolen items from being dropped into walls or closed gates by selecting the nearest safe drop position.
+- Updated world-state checks to re-read the active room after player transitions, fixing stale-room combat/win edge cases.
 
 ## 2025-11-21
 - Added colored keys (yellow/black/green) plus a white master key and updated gates to match.
