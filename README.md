@@ -20,6 +20,10 @@ Kid Adventure is a browser-based tribute to the Atari 2600 classic. Pick a kid-s
 2. Enable GitHub Pages for the `main` branch/root to host `index.html`.
 3. Open `https://<you>.github.io/<repo>/` to play on desktop or mobile.
 
+## Quality Checks
+- Run `python tools/qa_checks.py` to execute lightweight lint/smoke checks.
+- The check validates core file structure and that all assets referenced in `ASSET_CONFIG` exist on disk.
+
 ## Changelog
 - **2025-11-19** – Added multi-kid selector, custom art manifest, and virtual touch controls.
 - **2025-11-19** – Implemented multi-room layouts, dragon AI, castle silhouettes, and random layout rotation.
