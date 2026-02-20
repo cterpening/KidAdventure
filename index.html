@@ -130,6 +130,23 @@
     display: none;
   }
   .toast.show { display: block; }
+  .debug-overlay {
+    position: absolute;
+    left: 12px;
+    bottom: 12px;
+    max-width: min(90vw, 520px);
+    font-size: 12px;
+    line-height: 1.3;
+    color: #dce6f5;
+    border: 1px solid #2a3240;
+    border-radius: 8px;
+    background: rgba(7,10,15,.82);
+    padding: 8px 10px;
+    display: none;
+    white-space: pre-wrap;
+    pointer-events: none;
+  }
+  .debug-overlay.show { display: block; }
   body.high-contrast canvas {
     border-color: #ffffff;
     box-shadow: none;
@@ -191,6 +208,7 @@
     <div class="btns">
       <button id="btnReset">Reset (R)</button>
       <button id="btnPause">Pause (P)</button>
+      <button id="btnDebug">Debug</button>
     </div>
 
     <h2>Touch Controls</h2>
@@ -243,6 +261,7 @@
     <div class="hud" id="hud"></div>
     <canvas id="game" width="960" height="600"></canvas>
     <div class="toast" id="toast"></div>
+    <div class="debug-overlay" id="debugOverlay"></div>
   </main>
 
 <script type="module" src="js/game.js"></script>

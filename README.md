@@ -36,6 +36,11 @@ Kid Adventure is a browser-based tribute to the Atari 2600 classic. Pick a kid-s
 - Toggle high contrast mode from the sidebar.
 - Enable colorblind gate symbols to add shape indicators to gate types.
 
+## Debugging
+- Toggle the debug overlay via the `Debug` button or mapped debug key.
+- Overlay mode draws hitboxes and room/runtime diagnostics.
+- A runtime recovery pass periodically nudges blocked items to safe reachable spots.
+
 ## Code Layout
 - `index.html` contains markup/styles and loads the game via `js/game.js`.
 - `js/constants.js` contains shared canvas constants.

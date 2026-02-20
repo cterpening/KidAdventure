@@ -6,6 +6,8 @@
 - Replaced touch/mouse hybrid controls with pointer-event controls for cleaner mobile input behavior.
 - Added remappable keyboard controls with an in-game key binding editor and persisted key maps.
 - Added persisted accessibility settings: high-contrast UI mode and colorblind gate symbols.
+- Added a debug overlay (button + keybind) with hitbox rendering and live runtime state.
+- Added periodic runtime item recovery to relocate blocked/unreachable items.
 - Split browser code into JS modules (`js/game.js`, `js/constants.js`, `js/content-config.js`) and switched `index.html` to module loading.
 - Added `tools/qa_checks.py` for dependency-free lint/smoke checks and documented it in README.
 - Added `tools/layout_checks.py` for static map connectivity/invariant validation across all layout builders.

@@ -171,6 +171,8 @@ function syncControlHints() {
   if (resetBtn) resetBtn.textContent = `Reset (${keyLabel(keyBindings.reset?.[0] || "r")})`;
   const pauseBtn = document.getElementById("btnPause");
   if (pauseBtn) pauseBtn.textContent = `Pause (${keyLabel(keyBindings.pause?.[0] || "p")})`;
+  const debugBtn = document.getElementById("btnDebug");
+  if (debugBtn) debugBtn.textContent = `Debug (${keyLabel(keyBindings.debug?.[0] || "`")})`;
 }
 
 function renderKeyBindingControls() {
@@ -377,6 +379,46 @@ function showToast(text, ms=1600) {
   t.classList.add("show");
   clearTimeout(showToast._id);
   showToast._id = setTimeout(()=>t.classList.remove("show"), ms);
+}
+
+function drawDebugHitboxes(room) {
+  if (!debugState.enabled || !room) return;
+  ctx.save();
+  ctx.lineWidth = 1;
+  for (const wall of room.walls) {
+    ctx.strokeStyle = "rgba(80,160,255,0.8)";
+    ctx.strokeRect(wall.x + 0.5, wall.y + 0.5, wall.w - 1, wall.h - 1);
+  }
+  for (const wall of room.invisibleWalls || []) {
+    ctx.strokeStyle = "rgba(120,120,120,0.75)";
+    ctx.strokeRect(wall.x + 0.5, wall.y + 0.5, wall.w - 1, wall.h - 1);
+  }
+  if (room.gate) {
+    const g = room.gate.rect;
+    ctx.strokeStyle = room.gate.open ? "rgba(80,220,120,0.9)" : "rgba(255,180,80,0.9)";
+    ctx.strokeRect(g.x + 0.5, g.y + 0.5, g.w - 1, g.h - 1);
+  }
+  for (const item of room.items) {
+    if (!item.alive || item.heldBy) continue;
+    ctx.strokeStyle = "rgba(255,230,110,0.85)";
+    ctx.strokeRect(item.x + 0.5, item.y + 0.5, item.w - 1, item.h - 1);
+  }
+  for (const enemy of room.enemies) {
+    if (!enemy.alive) continue;
+    ctx.strokeStyle = "rgba(255,90,90,0.9)";
+    ctx.strokeRect(enemy.x + 0.5, enemy.y + 0.5, enemy.w - 1, enemy.h - 1);
+  }
+  if (WORLD?.bat && WORLD.bat.roomId === WORLD.currentRoomId) {
+    const bat = WORLD.bat;
+    ctx.strokeStyle = "rgba(200,170,255,0.9)";
+    ctx.strokeRect(bat.x + 0.5, bat.y + 0.5, bat.w - 1, bat.h - 1);
+  }
+  if (WORLD?.player) {
+    const p = WORLD.player;
+    ctx.strokeStyle = "rgba(255,255,255,0.9)";
+    ctx.strokeRect(p.x + 0.5, p.y + 0.5, p.w - 1, p.h - 1);
+  }
+  ctx.restore();
 }
 
 function drawCastleSilhouette(cfg={}) {
@@ -604,6 +646,9 @@ const accessibility = {
   highContrast: Boolean(savedAccessibility.highContrast),
   colorblindIndicators: Boolean(savedAccessibility.colorblindIndicators)
 };
+const debugState = {
+  enabled: Boolean(savedState.debugEnabled)
+};
 const IMAGES = { player: null, dragon: null, dragonDead: null, key: null, sword: null, trophy: null, bat: null };
 
 function random() {
@@ -618,7 +663,8 @@ function saveProgress() {
     totalWins,
     winsByProfile,
     keyBindings,
-    accessibility
+    accessibility,
+    debugEnabled: debugState.enabled
   });
 }
 
@@ -1246,6 +1292,7 @@ const WORLD = {
   currentLayoutName: "",
   player: new Player(),
   bat: null,
+  recoveryTimer: 2.5,
   buildRandomLayout() {
     const level = LEVEL_CONFIG[activeLevelId] || LEVEL_CONFIG[DEFAULT_LEVEL_ID];
     const variantIds = (level?.variants || []).filter(id => LAYOUT_VARIANTS[id]);
@@ -1273,6 +1320,23 @@ const WORLD = {
       if (idx >= 0) room.items.splice(idx, 1);
     }
     item.roomId = null;
+  },
+  recoverBlockedItems() {
+    let movedCount = 0;
+    for (const [roomId, room] of Object.entries(this.rooms)) {
+      for (const item of room.items) {
+        if (!item.alive || item.heldBy) continue;
+        const safe = findSafeItemDropPosition(item, room, item.x, item.y);
+        if (!safe) continue;
+        if (safe.x !== item.x || safe.y !== item.y) {
+          item.x = safe.x;
+          item.y = safe.y;
+          item.roomId = roomId;
+          movedCount += 1;
+        }
+      }
+    }
+    return movedCount;
   },
   current() {
     return this.rooms[this.currentRoomId];
@@ -1339,6 +1403,15 @@ const WORLD = {
         }
       }
     }
+
+    this.recoveryTimer -= dt;
+    if (this.recoveryTimer <= 0) {
+      this.recoveryTimer = 2.5;
+      const moved = this.recoverBlockedItems();
+      if (moved > 0 && debugState.enabled) {
+        showToast(`Recovery moved ${moved} item${moved === 1 ? "" : "s"}`, 900);
+      }
+    }
   },
   draw() {
     const room = this.current();
@@ -1348,6 +1421,7 @@ const WORLD = {
     }
     if (this.player.holding) this.player.holding.draw();
     this.player.draw();
+    drawDebugHitboxes(room);
   },
   resetPlayerToStart(dropHeld) {
     const held = this.player.holding;
@@ -1368,6 +1442,7 @@ const WORLD = {
     this.bat = null;
     this.buildRandomLayout();
     this.transitionTo(START_ROOM_ID, "default", { silent: true });
+    this.recoveryTimer = 2.5;
     state.winTimer = 0;
     state.hasWonThisRun = false;
     if (this.currentLayoutName) {
@@ -2804,6 +2879,12 @@ function touchActionPressed(action) {
   return false;
 }
 
+function setDebugEnabled(enabled) {
+  debugState.enabled = Boolean(enabled);
+  saveProgress();
+  renderDebugOverlay();
+}
+
 /* =========================================================
    Game loop
    ========================================================= */
@@ -2818,6 +2899,10 @@ function loop(ts) {
   // toggles
   if (actionPressed("pause")) { state.paused = !state.paused; showToast(state.paused ? "Paused" : "Resumed"); }
   if (actionPressed("reset")) { WORLD.resetAll(); showToast("Reset"); }
+  if (actionPressed("debug")) {
+    setDebugEnabled(!debugState.enabled);
+    showToast(debugState.enabled ? "Debug on" : "Debug off");
+  }
 
   if (!state.paused) {
     WORLD.update(dt);
@@ -2831,6 +2916,7 @@ function loop(ts) {
 
   // HUD
   renderHUD();
+  renderDebugOverlay(dt);
 
   // win banner
   if (state.winTimer > 0) {
@@ -2885,12 +2971,38 @@ function renderHUD() {
   if (gateState) hud.append(tag(`Gate: ${gateState}`));
 }
 
+function renderDebugOverlay(dt=0) {
+  const overlay = document.getElementById("debugOverlay");
+  if (!overlay) return;
+  if (!debugState.enabled) {
+    overlay.classList.remove("show");
+    overlay.textContent = "";
+    return;
+  }
+  const room = WORLD.current();
+  const p = WORLD.player;
+  const lines = [
+    `Room ID: ${WORLD.currentRoomId}`,
+    `Room Name: ${room?.name || "(unknown)"}`,
+    `Player: x=${Math.round(p.x)} y=${Math.round(p.y)} hold=${p.holding ? p.holding.kind : "none"}`,
+    `Layout: ${WORLD.currentLayoutId || "n/a"} | Seed: ${activeSeed}`,
+    `Bat: ${WORLD.bat ? `${WORLD.bat.roomId}${WORLD.bat.carrying ? ` carrying ${WORLD.bat.carrying.kind}` : ""}` : "none"}`,
+    `Paused: ${state.paused} | dt=${(dt * 1000).toFixed(1)}ms`
+  ];
+  overlay.textContent = lines.join("\n");
+  overlay.classList.add("show");
+}
+
 /* =========================================================
    Buttons
    ========================================================= */
 
 document.getElementById("btnReset").addEventListener("click", ()=>{ WORLD.resetAll(); showToast("Reset"); });
 document.getElementById("btnPause").addEventListener("click", ()=>{ state.paused=!state.paused; showToast(state.paused ? "Paused" : "Resumed"); });
+document.getElementById("btnDebug").addEventListener("click", ()=>{
+  setDebugEnabled(!debugState.enabled);
+  showToast(debugState.enabled ? "Debug on" : "Debug off");
+});
 
 function setupTouchControls() {
   const pad = document.getElementById("touchPad");
