@@ -30,6 +30,11 @@ Kid Adventure is a browser-based tribute to the Atari 2600 classic. Pick a kid-s
 
 ## Persistence
 - The game saves selected kid, level, seed, and win counters in `localStorage` (`kidAdventure.save.v1`).
+- Accessibility settings and key bindings are persisted in the same save object.
+
+## Accessibility
+- Toggle high contrast mode from the sidebar.
+- Enable colorblind gate symbols to add shape indicators to gate types.
 
 ## Code Layout
 - `index.html` contains markup/styles and loads the game via `js/game.js`.

@@ -206,6 +206,31 @@ function renderKeyBindingControls() {
   }
 }
 
+function applyAccessibilityOptions() {
+  document.body.classList.toggle("high-contrast", accessibility.highContrast);
+}
+
+function setupAccessibilityControls() {
+  const highContrast = document.getElementById("optHighContrast");
+  const colorblind = document.getElementById("optColorblind");
+  if (highContrast) {
+    highContrast.checked = accessibility.highContrast;
+    highContrast.addEventListener("change", (event) => {
+      accessibility.highContrast = Boolean(event.target.checked);
+      applyAccessibilityOptions();
+      saveProgress();
+    });
+  }
+  if (colorblind) {
+    colorblind.checked = accessibility.colorblindIndicators;
+    colorblind.addEventListener("change", (event) => {
+      accessibility.colorblindIndicators = Boolean(event.target.checked);
+      saveProgress();
+      lastHudState = "";
+    });
+  }
+}
+
 function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
 function resolveItemGateOverlap(item, room, player) {
   if (!room.gate || room.gate.open) return;
@@ -281,6 +306,44 @@ function drawWallRect(r, color="#2a3340", stroke="#11161d") {
   ctx.strokeStyle = stroke;
   ctx.lineWidth = 2;
   ctx.strokeRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2);
+}
+function drawGateSymbol(rect, keyKind) {
+  if (!accessibility.colorblindIndicators) return;
+  const kind = normalizeKeyKind(keyKind);
+  const cx = rect.x + rect.w / 2;
+  const cy = rect.y + rect.h / 2;
+  const size = Math.max(10, Math.min(rect.w, rect.h) * 0.2);
+  ctx.save();
+  ctx.strokeStyle = "#f5f7fb";
+  ctx.fillStyle = "rgba(0,0,0,0.3)";
+  ctx.lineWidth = 3;
+  if (kind === "key-yellow") {
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - size);
+    ctx.lineTo(cx - size, cy + size);
+    ctx.lineTo(cx + size, cy + size);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  } else if (kind === "key-black") {
+    ctx.beginPath();
+    ctx.rect(cx - size, cy - size, size * 2, size * 2);
+    ctx.fill();
+    ctx.stroke();
+  } else if (kind === "key-green") {
+    ctx.beginPath();
+    ctx.arc(cx, cy, size, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  } else {
+    ctx.beginPath();
+    ctx.moveTo(cx - size, cy - size);
+    ctx.lineTo(cx + size, cy + size);
+    ctx.moveTo(cx + size, cy - size);
+    ctx.lineTo(cx - size, cy + size);
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 function drawImageOrFallback(img, r, color, label) {
   if (img && img.complete && img.naturalWidth > 0) {
@@ -519,6 +582,9 @@ const querySeed = searchParams.get("seed");
 const savedKid = typeof savedState.kidId === "string" ? savedState.kidId : "";
 const savedLevel = typeof savedState.levelId === "string" ? savedState.levelId : "";
 const savedSeed = typeof savedState.seed === "string" ? savedState.seed : "";
+const savedAccessibility = (savedState.accessibility && typeof savedState.accessibility === "object")
+  ? savedState.accessibility
+  : {};
 let activeKidId = (queryKid && ASSET_CONFIG[queryKid]) ? queryKid : DEFAULT_KID_ID;
 if ((!queryKid || !ASSET_CONFIG[queryKid]) && savedKid && ASSET_CONFIG[savedKid]) {
   activeKidId = savedKid;
@@ -534,6 +600,10 @@ let activeSeed = normalizeSeed(querySeed || savedSeed);
 let rng = createSeededRng(activeSeed);
 let totalWins = Number.isFinite(savedState.totalWins) ? Number(savedState.totalWins) : 0;
 const winsByProfile = (savedState.winsByProfile && typeof savedState.winsByProfile === "object") ? savedState.winsByProfile : {};
+const accessibility = {
+  highContrast: Boolean(savedAccessibility.highContrast),
+  colorblindIndicators: Boolean(savedAccessibility.colorblindIndicators)
+};
 const IMAGES = { player: null, dragon: null, dragonDead: null, key: null, sword: null, trophy: null, bat: null };
 
 function random() {
@@ -547,7 +617,8 @@ function saveProgress() {
     seed: activeSeed,
     totalWins,
     winsByProfile,
-    keyBindings
+    keyBindings,
+    accessibility
   });
 }
 
@@ -674,6 +745,8 @@ populateLevelSelector();
 updateAdventureTitle();
 renderKeyBindingControls();
 syncControlHints();
+applyAccessibilityOptions();
+setupAccessibilityControls();
 syncQueryParams();
 
 /* =========================================================
@@ -722,6 +795,7 @@ class Gate {
       ctx.fillStyle = "#1b1f27";
       ctx.fillRect(this.rect.x, this.rect.y + this.rect.h/2 - 6, this.rect.w, 12);
     }
+    drawGateSymbol(this.rect, this.requiredKey);
   }
 }
 
