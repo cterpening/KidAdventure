@@ -10,6 +10,7 @@ Kid Adventure is a browser-based tribute to the Atari 2600 classic. Pick a kid-s
 - The bat steals items and moves them between rooms, so expect surprises.
 - Defeat dragons with the sword, then bring the trophy back to the start pedestal.
 - Add `?seed=<value>` to the URL for deterministic layout/enemy randomness during debugging.
+- Remap controls in the in-game "Key Bindings" section (saved in local storage).
 
 ## Custom Kid Art
 - Drop PNGs or JPGs into `assets/kids/<kidId>/` named `player.png`.

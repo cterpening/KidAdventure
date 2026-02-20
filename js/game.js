@@ -20,21 +20,104 @@ const keys = new Set();
 const held = (k) => keys.has(k);
 const _pressed = new Set();
 const _touchActions = { interact: false, drop: false };
+const ACTION_LABELS = {
+  moveUp: "Move Up",
+  moveDown: "Move Down",
+  moveLeft: "Move Left",
+  moveRight: "Move Right",
+  interact: "Use / Pick",
+  drop: "Drop Item",
+  pause: "Pause",
+  reset: "Reset",
+  debug: "Debug Overlay"
+};
+const DEFAULT_KEY_BINDINGS = {
+  moveUp: ["w", "arrowup"],
+  moveDown: ["s", "arrowdown"],
+  moveLeft: ["a", "arrowleft"],
+  moveRight: ["d", "arrowright"],
+  interact: ["e"],
+  drop: ["q"],
+  pause: ["p"],
+  reset: ["r"],
+  debug: ["`"]
+};
+const ACTION_FOR_DIR = {
+  up: "moveUp",
+  down: "moveDown",
+  left: "moveLeft",
+  right: "moveRight"
+};
+function cloneDefaultBindings() {
+  return JSON.parse(JSON.stringify(DEFAULT_KEY_BINDINGS));
+}
+let keyBindings = cloneDefaultBindings();
+let awaitingBindAction = null;
 const KEY_CAPTURE_TAGS = new Set(["INPUT", "SELECT", "TEXTAREA", "BUTTON"]);
-const PREVENT_KEYS = new Set(["arrowup", "arrowdown", "arrowleft", "arrowright", " "]);
+const PREVENT_KEYS = new Set(["arrowup", "arrowdown", "arrowleft", "arrowright", "space"]);
+
+function normalizeKeyName(key) {
+  const normalized = String(key || "").toLowerCase();
+  if (!normalized) return "";
+  if (normalized === " " || normalized === "spacebar") return "space";
+  return normalized;
+}
+
+function keyLabel(key) {
+  if (key === "space") return "Space";
+  if (key.startsWith("arrow")) return `Arrow ${key.slice(5)}`;
+  if (key.length === 1) return key.toUpperCase();
+  return key;
+}
+
+function actionHeld(action) {
+  const bindings = keyBindings[action] || [];
+  return bindings.some((key) => held(key));
+}
+
+function actionPressed(action) {
+  const bindings = keyBindings[action] || [];
+  for (const key of bindings) {
+    if (_pressed.has(key)) {
+      _pressed.delete(key);
+      return true;
+    }
+  }
+  return false;
+}
+
 function shouldCaptureKey(e) {
   const tag = e.target?.tagName;
   return !tag || !KEY_CAPTURE_TAGS.has(tag);
 }
 addEventListener("keydown", (e) => {
+  const key = normalizeKeyName(e.key);
+  if (!key) return;
+  if (awaitingBindAction) {
+    e.preventDefault();
+    if (key === "escape") {
+      awaitingBindAction = null;
+      renderKeyBindingControls();
+      return;
+    }
+    const boundAction = awaitingBindAction;
+    keyBindings[boundAction] = [key];
+    awaitingBindAction = null;
+    renderKeyBindingControls();
+    syncControlHints();
+    saveProgress();
+    showToast(`Bound ${ACTION_LABELS[boundAction] || "action"} to ${keyLabel(key)}`);
+    return;
+  }
   if (!shouldCaptureKey(e)) return;
-  const key = e.key.toLowerCase();
   if (PREVENT_KEYS.has(key)) e.preventDefault();
   keys.add(key);
+  if (!_pressed.has(key)) _pressed.add(key);
 });
 addEventListener("keyup", (e) => {
   if (!shouldCaptureKey(e)) return;
-  const key = e.key.toLowerCase();
+  const key = normalizeKeyName(e.key);
+  if (!key) return;
   if (PREVENT_KEYS.has(key)) e.preventDefault();
   keys.delete(key);
 });
@@ -62,11 +145,65 @@ document.addEventListener("visibilitychange", () => {
 
 function heldDirection(dir) {
   if (touchState[dir]) return true;
-  if (dir === "up") return held("arrowup") || held("w");
-  if (dir === "down") return held("arrowdown") || held("s");
-  if (dir === "left") return held("arrowleft") || held("a");
-  if (dir === "right") return held("arrowright") || held("d");
-  return false;
+  const action = ACTION_FOR_DIR[dir];
+  if (!action) return false;
+  return actionHeld(action);
+}
+
+function normalizeSavedBindings(raw) {
+  const out = cloneDefaultBindings();
+  if (!raw || typeof raw !== "object") return out;
+  for (const action of Object.keys(DEFAULT_KEY_BINDINGS)) {
+    const arr = Array.isArray(raw[action]) ? raw[action] : [];
+    const next = arr.map((key) => normalizeKeyName(key)).filter(Boolean);
+    if (next.length) out[action] = Array.from(new Set(next));
+  }
+  return out;
+}
+
+function syncControlHints() {
+  const controls = document.getElementById("controlTips");
+  if (!controls) return;
+  const interact = keyBindings.interact?.[0] || "e";
+  const drop = keyBindings.drop?.[0] || "q";
+  controls.innerHTML = `Move: <span class="kbd">${keyLabel(keyBindings.moveUp?.[0] || "w")}</span> / <span class="kbd">${keyLabel(keyBindings.moveLeft?.[0] || "a")}</span> / <span class="kbd">${keyLabel(keyBindings.moveDown?.[0] || "s")}</span> / <span class="kbd">${keyLabel(keyBindings.moveRight?.[0] || "d")}</span><br>Pick up / Use: <span class="kbd">${keyLabel(interact)}</span> &nbsp;·&nbsp; Drop: <span class="kbd">${keyLabel(drop)}</span><br>`;
+  const resetBtn = document.getElementById("btnReset");
+  if (resetBtn) resetBtn.textContent = `Reset (${keyLabel(keyBindings.reset?.[0] || "r")})`;
+  const pauseBtn = document.getElementById("btnPause");
+  if (pauseBtn) pauseBtn.textContent = `Pause (${keyLabel(keyBindings.pause?.[0] || "p")})`;
+}
+
+function renderKeyBindingControls() {
+  const container = document.getElementById("bindGrid");
+  if (!container) return;
+  container.innerHTML = "";
+  for (const action of Object.keys(ACTION_LABELS)) {
+    const key = keyBindings[action]?.[0] || "";
+    const btn = document.createElement("button");
+    btn.className = "bind-btn";
+    btn.textContent = `${ACTION_LABELS[action]}: ${key ? keyLabel(key) : "(none)"}`;
+    if (awaitingBindAction === action) {
+      btn.classList.add("waiting");
+      btn.textContent = `${ACTION_LABELS[action]}: press key...`;
+    }
+    btn.addEventListener("click", () => {
+      awaitingBindAction = action;
+      renderKeyBindingControls();
+    });
+    container.appendChild(btn);
+  }
+  const resetBtn = document.getElementById("btnResetBinds");
+  if (resetBtn && !resetBtn.dataset.bound) {
+    resetBtn.dataset.bound = "1";
+    resetBtn.addEventListener("click", () => {
+      keyBindings = cloneDefaultBindings();
+      awaitingBindAction = null;
+      renderKeyBindingControls();
+      syncControlHints();
+      saveProgress();
+      showToast("Bindings reset");
+    });
+  }
 }
 
 function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
@@ -392,6 +529,7 @@ if ((!queryLevel || !LEVEL_CONFIG[queryLevel]) && savedLevel && LEVEL_CONFIG[sav
   activeLevelId = savedLevel;
 }
 let activeLevelName = LEVEL_CONFIG[activeLevelId]?.label || LEVEL_CONFIG[DEFAULT_LEVEL_ID].label;
+keyBindings = normalizeSavedBindings(savedState.keyBindings);
 let activeSeed = normalizeSeed(querySeed || savedSeed);
 let rng = createSeededRng(activeSeed);
 let totalWins = Number.isFinite(savedState.totalWins) ? Number(savedState.totalWins) : 0;
@@ -408,7 +546,8 @@ function saveProgress() {
     levelId: activeLevelId,
     seed: activeSeed,
     totalWins,
-    winsByProfile
+    winsByProfile,
+    keyBindings
   });
 }
 
@@ -533,6 +672,8 @@ loadKidAssets(activeKidId);
 populateKidSelector();
 populateLevelSelector();
 updateAdventureTitle();
+renderKeyBindingControls();
+syncControlHints();
 syncQueryParams();
 
 /* =========================================================
@@ -847,7 +988,7 @@ class Player {
     }
 
     // pick / drop
-    if (wasPressed("e") || touchActionPressed("interact")) {
+    if (actionPressed("interact") || touchActionPressed("interact")) {
       if (this.holding) {
         // use on gate if touching it and it's closed
         // otherwise do nothing here; dropping is Q
@@ -863,7 +1004,7 @@ class Player {
         }
       }
     }
-    if (wasPressed("q") || touchActionPressed("drop")) {
+    if (actionPressed("drop") || touchActionPressed("drop")) {
       if (this.holding) {
         const it = this.holding;
         it.heldBy = null; this.holding = null;
@@ -2581,21 +2722,6 @@ const state = {
   hasWonThisRun: false
 };
 
-/* =========================================================
-   Input edge detection (pressed once)
-   ========================================================= */
-
-addEventListener("keydown", (e) => {
-  if (!shouldCaptureKey(e)) return;
-  const k = e.key.toLowerCase();
-  if (!_pressed.has(k)) _pressed.add(k);
-});
-function wasPressed(k) {
-  k = k.toLowerCase();
-  if (_pressed.has(k)) { _pressed.delete(k); return true; }
-  return false;
-}
-
 function touchActionPressed(action) {
   if (_touchActions[action]) {
     _touchActions[action] = false;
@@ -2616,8 +2742,8 @@ function loop(ts) {
   last = ts;
 
   // toggles
-  if (wasPressed("p")) { state.paused = !state.paused; showToast(state.paused ? "Paused" : "Resumed"); }
-  if (wasPressed("r")) { WORLD.resetAll(); showToast("Reset"); }
+  if (actionPressed("pause")) { state.paused = !state.paused; showToast(state.paused ? "Paused" : "Resumed"); }
+  if (actionPressed("reset")) { WORLD.resetAll(); showToast("Reset"); }
 
   if (!state.paused) {
     WORLD.update(dt);
@@ -2695,34 +2821,43 @@ document.getElementById("btnPause").addEventListener("click", ()=>{ state.paused
 function setupTouchControls() {
   const pad = document.getElementById("touchPad");
   if (!pad) return;
-  const startDir = (dir) => { touchState[dir] = true; };
-  const stopDir = (dir) => { touchState[dir] = false; };
+  const dirPointers = new Map();
+  const refreshTouchDirs = () => {
+    touchState.up = false;
+    touchState.down = false;
+    touchState.left = false;
+    touchState.right = false;
+    for (const dir of dirPointers.values()) {
+      if (dir && Object.prototype.hasOwnProperty.call(touchState, dir)) {
+        touchState[dir] = true;
+      }
+    }
+  };
 
-  pad.querySelectorAll("[data-dir]").forEach(btn => {
+  pad.querySelectorAll("[data-dir]").forEach((btn) => {
     const dir = btn.getAttribute("data-dir");
     const start = (ev) => {
       ev.preventDefault();
-      startDir(dir);
+      if (typeof btn.setPointerCapture === "function") {
+        btn.setPointerCapture(ev.pointerId);
+      }
+      dirPointers.set(ev.pointerId, dir);
+      refreshTouchDirs();
     };
     const end = (ev) => {
       ev.preventDefault();
-      stopDir(dir);
+      dirPointers.delete(ev.pointerId);
+      refreshTouchDirs();
     };
-    btn.addEventListener("touchstart", start);
-    btn.addEventListener("mousedown", start);
-    btn.addEventListener("touchend", end);
-    btn.addEventListener("touchcancel", end);
-    btn.addEventListener("mouseup", end);
-    btn.addEventListener("mouseleave", end);
+    btn.addEventListener("pointerdown", start);
+    btn.addEventListener("pointerup", end);
+    btn.addEventListener("pointercancel", end);
+    btn.addEventListener("lostpointercapture", end);
   });
 
-  document.querySelectorAll(".touch-actions .touch-btn").forEach(btn => {
+  document.querySelectorAll(".touch-actions .touch-btn").forEach((btn) => {
     const action = btn.dataset.action;
-    btn.addEventListener("click", (ev) => {
-      ev.preventDefault();
-      _touchActions[action] = true;
-    });
-    btn.addEventListener("touchstart", (ev) => {
+    btn.addEventListener("pointerdown", (ev) => {
       ev.preventDefault();
       _touchActions[action] = true;
     });

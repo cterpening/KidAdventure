@@ -62,6 +62,7 @@
     align-items: center;
     justify-content: center;
     user-select: none;
+    touch-action: none;
   }
   .touch-btn:active {
     background: rgba(95,212,255,.35);
@@ -86,6 +87,20 @@
   .kbd {
     display: inline-block; padding: 2px 6px; border: 1px solid #2a3240;
     border-bottom-width: 2px; border-radius: 6px; background: #0d1217; font-size: 12px; color: var(--ink);
+  }
+  .bind-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0,1fr));
+    gap: 8px;
+  }
+  .bind-btn {
+    text-align: left;
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+  .bind-btn.waiting {
+    border-color: var(--accent);
+    background: rgba(95,212,255,.2);
   }
   .tips { font-size: 13px; color: var(--muted); line-height: 1.4; }
   main { display: grid; place-items: center; padding: 12px; }
@@ -184,9 +199,17 @@
     </div>
 
     <h2>Controls</h2>
-    <div class="tips">
+    <div class="tips" id="controlTips">
       Move: <span class="kbd">WASD</span> / <span class="kbd">Arrows</span><br>
       Pick up / Use: <span class="kbd">E</span> &nbsp;·&nbsp; Drop: <span class="kbd">Q</span><br>
+    </div>
+    <h2>Key Bindings</h2>
+    <div class="bind-grid" id="bindGrid"></div>
+    <div class="row">
+      <button id="btnResetBinds">Reset Bindings</button>
+    </div>
+    <div class="tips">
+      Click a binding button, then press a key. Press <span class="kbd">Esc</span> to cancel remapping.
     </div>
 
     <h2>Notes</h2>
