@@ -1,9 +1,9 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Adventure-like (HTML5 Canvas) — Custom Characters</title>
+<title>Kid Adventure - Family Quest</title>
 <style>
   :root {
     --bg: #0f1115;
@@ -186,7 +186,7 @@
       <b>2.</b> Match yellow, black, and green keys to their gates (white key opens any gate).<br>
       <b>3.</b> The bat steals items and drops them in other rooms.<br>
       <b>4.</b> Defeat dragons with the sword, then bring the trophy home.<br>
-      Gates, dragons, and treasures move around depending on the level you pick.
+      Adventure Mode keeps one dependable world. Remix Mode keeps the same rules but rotates the map.
     </div>
 
     <div class="row">
@@ -197,16 +197,16 @@
       Switching heroes reloads their art instantly and respawns you near the start.
     </div>
     <div class="row">
-      <label for="levelSelect">Choose level</label>
+      <label for="levelSelect">Choose mode</label>
       <select id="levelSelect"></select>
     </div>
-    <div class="tips">
-      Level 1 is the classic grounds, Level 2 adds sprawling catacombs, Level 3 is a huge dragon gauntlet.
+    <div class="tips" id="modeTips">
+      Adventure Mode is the steady castle quest. Remix Mode rotates through larger family remix maps.
     </div>
 
     <h2>Game</h2>
     <div class="btns">
-      <button id="btnReset">Reset (R)</button>
+      <button id="btnReset">Restart (R)</button>
       <button id="btnPause">Pause (P)</button>
       <button id="btnDebug">Debug</button>
     </div>
@@ -214,13 +214,13 @@
     <h2>Touch Controls</h2>
     <div class="touch-pad" id="touchPad">
       <div></div>
-      <button class="touch-btn" data-dir="up">▲</button>
+      <button class="touch-btn" data-dir="up">&#9650;</button>
       <div></div>
-      <button class="touch-btn" data-dir="left">◀</button>
+      <button class="touch-btn" data-dir="left">&#9664;</button>
       <div></div>
-      <button class="touch-btn" data-dir="right">▶</button>
+      <button class="touch-btn" data-dir="right">&#9654;</button>
       <div></div>
-      <button class="touch-btn" data-dir="down">▼</button>
+      <button class="touch-btn" data-dir="down">&#9660;</button>
       <div></div>
     </div>
     <div class="touch-actions">
@@ -231,7 +231,7 @@
     <h2>Controls</h2>
     <div class="tips" id="controlTips">
       Move: <span class="kbd">WASD</span> / <span class="kbd">Arrows</span><br>
-      Pick up / Use: <span class="kbd">E</span> &nbsp;·&nbsp; Drop: <span class="kbd">Q</span><br>
+      Pick up / Use: <span class="kbd">E</span> &nbsp;&middot;&nbsp; Drop: <span class="kbd">Q</span><br>
     </div>
     <h2>Key Bindings</h2>
     <div class="bind-grid" id="bindGrid"></div>
@@ -252,14 +252,14 @@
     <div class="tips">
       Images are scaled to the entity size after loading from disk. Update the PNGs
       in each kid folder and refresh to see them in game. Transparent backgrounds look best.
-      Each reset rotates through curated map variants so the overworld layout always changes
-      but stays solvable.
+      Adventure Mode keeps one teachable world so the quest feels consistent. Remix Mode trades that
+      stability for surprise routes and bigger detours.
     </div>
   </aside>
 
   <main>
     <div class="hud" id="hud"></div>
-    <canvas id="game" width="960" height="600"></canvas>
+    <canvas id="game" width="960" height="600" tabindex="0"></canvas>
     <div class="toast" id="toast"></div>
     <div class="debug-overlay" id="debugOverlay"></div>
   </main>
@@ -267,4 +267,6 @@
 <script type="module" src="js/game.js"></script>
 </body>
 </html>
+
+
 

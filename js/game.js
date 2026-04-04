@@ -1,4 +1,4 @@
-"use strict";
+﻿"use strict";
 import { W, H } from "./constants.js";
 import {
   ASSET_CONFIG,
@@ -15,6 +15,7 @@ import {
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d", { alpha: false });
 ctx.imageSmoothingEnabled = false;
+canvas.addEventListener("pointerdown", () => restoreGameFocus());
 
 const keys = new Set();
 const held = (k) => keys.has(k);
@@ -55,6 +56,11 @@ let keyBindings = cloneDefaultBindings();
 let awaitingBindAction = null;
 const KEY_CAPTURE_TAGS = new Set(["INPUT", "SELECT", "TEXTAREA", "BUTTON"]);
 const PREVENT_KEYS = new Set(["arrowup", "arrowdown", "arrowleft", "arrowright", "space"]);
+
+function restoreGameFocus() {
+  if (!canvas || document.activeElement === canvas) return;
+  canvas.focus({ preventScroll: true });
+}
 
 function normalizeKeyName(key) {
   const normalized = String(key || "").toLowerCase();
@@ -166,9 +172,9 @@ function syncControlHints() {
   if (!controls) return;
   const interact = keyBindings.interact?.[0] || "e";
   const drop = keyBindings.drop?.[0] || "q";
-  controls.innerHTML = `Move: <span class="kbd">${keyLabel(keyBindings.moveUp?.[0] || "w")}</span> / <span class="kbd">${keyLabel(keyBindings.moveLeft?.[0] || "a")}</span> / <span class="kbd">${keyLabel(keyBindings.moveDown?.[0] || "s")}</span> / <span class="kbd">${keyLabel(keyBindings.moveRight?.[0] || "d")}</span><br>Pick up / Use: <span class="kbd">${keyLabel(interact)}</span> &nbsp;·&nbsp; Drop: <span class="kbd">${keyLabel(drop)}</span><br>`;
+  controls.innerHTML = `Move: <span class="kbd">${keyLabel(keyBindings.moveUp?.[0] || "w")}</span> / <span class="kbd">${keyLabel(keyBindings.moveLeft?.[0] || "a")}</span> / <span class="kbd">${keyLabel(keyBindings.moveDown?.[0] || "s")}</span> / <span class="kbd">${keyLabel(keyBindings.moveRight?.[0] || "d")}</span><br>Pick up / Use: <span class="kbd">${keyLabel(interact)}</span> &nbsp;&middot;&nbsp; Drop: <span class="kbd">${keyLabel(drop)}</span><br>`;
   const resetBtn = document.getElementById("btnReset");
-  if (resetBtn) resetBtn.textContent = `Reset (${keyLabel(keyBindings.reset?.[0] || "r")})`;
+  if (resetBtn) resetBtn.textContent = `Restart (${keyLabel(keyBindings.reset?.[0] || "r")})`;
   const pauseBtn = document.getElementById("btnPause");
   if (pauseBtn) pauseBtn.textContent = `Pause (${keyLabel(keyBindings.pause?.[0] || "p")})`;
   const debugBtn = document.getElementById("btnDebug");
@@ -309,17 +315,18 @@ function drawWallRect(r, color="#2a3340", stroke="#11161d") {
   ctx.lineWidth = 2;
   ctx.strokeRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2);
 }
-function drawGateSymbol(rect, keyKind) {
-  if (!accessibility.colorblindIndicators) return;
-  const kind = normalizeKeyKind(keyKind);
+function drawAdventureSigil(rect, kind, options={}) {
+  const normalizedKind = normalizeKeyKind(kind);
+  const scale = options.scale ?? 1;
   const cx = rect.x + rect.w / 2;
   const cy = rect.y + rect.h / 2;
-  const size = Math.max(10, Math.min(rect.w, rect.h) * 0.2);
+  const size = Math.max(6, Math.min(rect.w, rect.h) * 0.28 * scale);
   ctx.save();
-  ctx.strokeStyle = "#f5f7fb";
-  ctx.fillStyle = "rgba(0,0,0,0.3)";
-  ctx.lineWidth = 3;
-  if (kind === "key-yellow") {
+  ctx.strokeStyle = options.strokeStyle || "#f5f7fb";
+  ctx.fillStyle = options.fillStyle || "rgba(0,0,0,0.3)";
+  ctx.lineWidth = options.lineWidth || 3;
+
+  if (normalizedKind === "key-yellow") {
     ctx.beginPath();
     ctx.moveTo(cx, cy - size);
     ctx.lineTo(cx - size, cy + size);
@@ -327,15 +334,69 @@ function drawGateSymbol(rect, keyKind) {
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
-  } else if (kind === "key-black") {
+  } else if (normalizedKind === "key-black") {
     ctx.beginPath();
     ctx.rect(cx - size, cy - size, size * 2, size * 2);
     ctx.fill();
     ctx.stroke();
-  } else if (kind === "key-green") {
+  } else if (normalizedKind === "key-green") {
     ctx.beginPath();
     ctx.arc(cx, cy, size, 0, Math.PI * 2);
     ctx.fill();
+    ctx.stroke();
+  } else if (normalizedKind === "key-white") {
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - size);
+    ctx.lineTo(cx + size, cy);
+    ctx.lineTo(cx, cy + size);
+    ctx.lineTo(cx - size, cy);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  } else if (normalizedKind === "sword") {
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - size * 1.2);
+    ctx.lineTo(cx, cy + size * 1.05);
+    ctx.moveTo(cx - size * 0.75, cy - size * 0.1);
+    ctx.lineTo(cx + size * 0.75, cy - size * 0.1);
+    ctx.moveTo(cx - size * 0.4, cy + size * 0.95);
+    ctx.lineTo(cx + size * 0.4, cy + size * 0.95);
+    ctx.stroke();
+  } else if (normalizedKind === "bridge") {
+    const left = cx - size * 1.2;
+    const right = cx + size * 1.2;
+    const top = cy - size * 0.7;
+    const bottom = cy + size * 0.7;
+    ctx.beginPath();
+    ctx.moveTo(left, bottom);
+    ctx.lineTo(left + size * 0.4, top);
+    ctx.lineTo(right - size * 0.4, top);
+    ctx.lineTo(right, bottom);
+    for (let i = 1; i <= 3; i++) {
+      const t = i / 4;
+      const x = left + (right - left) * t;
+      ctx.moveTo(x, top + size * 0.1);
+      ctx.lineTo(x, bottom - size * 0.1);
+    }
+    ctx.stroke();
+  } else if (normalizedKind === "trophy") {
+    ctx.beginPath();
+    ctx.moveTo(cx - size * 0.8, cy - size * 0.9);
+    ctx.lineTo(cx + size * 0.8, cy - size * 0.9);
+    ctx.lineTo(cx + size * 0.45, cy);
+    ctx.lineTo(cx - size * 0.45, cy);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx, cy + size * 0.95);
+    ctx.moveTo(cx - size * 0.55, cy + size * 0.95);
+    ctx.lineTo(cx + size * 0.55, cy + size * 0.95);
+    ctx.moveTo(cx - size * 0.95, cy - size * 0.55);
+    ctx.quadraticCurveTo(cx - size * 1.35, cy - size * 0.25, cx - size * 0.7, cy + size * 0.05);
+    ctx.moveTo(cx + size * 0.95, cy - size * 0.55);
+    ctx.quadraticCurveTo(cx + size * 1.35, cy - size * 0.25, cx + size * 0.7, cy + size * 0.05);
     ctx.stroke();
   } else {
     ctx.beginPath();
@@ -346,6 +407,16 @@ function drawGateSymbol(rect, keyKind) {
     ctx.stroke();
   }
   ctx.restore();
+}
+function drawGateSymbol(rect, keyKind) {
+  if (!accessibility.colorblindIndicators) return;
+  const kind = normalizeKeyKind(keyKind);
+  drawAdventureSigil(rect, kind, {
+    strokeStyle: "#f5f7fb",
+    fillStyle: "rgba(0,0,0,0.3)",
+    lineWidth: 3,
+    scale: 0.7
+  });
 }
 function drawImageOrFallback(img, r, color, label) {
   if (img && img.complete && img.naturalWidth > 0) {
@@ -371,6 +442,65 @@ function drawImageOrFallback(img, r, color, label) {
       ctx.textBaseline = "middle";
       ctx.fillText(label, r.x + r.w/2, r.y + r.h/2);
     }
+  }
+}
+function drawItemPlate(r, accentColor) {
+  ctx.save();
+  ctx.fillStyle = "rgba(8,12,18,0.88)";
+  ctx.fillRect(r.x, r.y, r.w, r.h);
+  ctx.fillStyle = accentColor || "#6b7788";
+  ctx.globalAlpha = 0.18;
+  ctx.fillRect(r.x + 1, r.y + 1, r.w - 2, Math.max(4, Math.floor(r.h * 0.32)));
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
+function drawAdventureKey(r, kind, color) {
+  const headSize = Math.max(12, r.h - 6);
+  const headRect = {
+    x: r.x + 3,
+    y: r.y + (r.h - headSize) / 2,
+    w: headSize,
+    h: headSize
+  };
+  drawAdventureSigil(headRect, kind, {
+    strokeStyle: "#11161d",
+    fillStyle: color,
+    lineWidth: 2,
+    scale: 0.9
+  });
+  const shaftX = headRect.x + headRect.w * 0.48;
+  const shaftY = r.y + r.h / 2 - 3;
+  const shaftW = Math.max(10, r.w - (shaftX - r.x) - 6);
+  ctx.fillStyle = color;
+  ctx.fillRect(shaftX, shaftY, shaftW, 6);
+  ctx.fillRect(r.x + r.w - 10, shaftY, 3, 9);
+  ctx.fillRect(r.x + r.w - 16, shaftY + 2, 3, 7);
+  ctx.strokeStyle = "#11161d";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(shaftX + 0.5, shaftY + 0.5, shaftW - 1, 5);
+}
+function drawBridgeItem(r, color) {
+  const left = r.x + 5;
+  const right = r.x + r.w - 5;
+  const top = r.y + 6;
+  const bottom = r.y + r.h - 6;
+  ctx.strokeStyle = "#4f3522";
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(left, bottom);
+  ctx.lineTo(left + 4, top);
+  ctx.lineTo(right - 4, top);
+  ctx.lineTo(right, bottom);
+  ctx.stroke();
+  const plankCount = 4;
+  const plankWidth = Math.max(5, Math.floor((right - left - 10) / plankCount));
+  for (let i = 0; i < plankCount; i++) {
+    const x = left + 4 + i * plankWidth;
+    ctx.fillStyle = color;
+    ctx.fillRect(x, top + 2, plankWidth - 2, bottom - top - 4);
+    ctx.strokeStyle = "#11161d";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(x + 0.5, top + 2.5, plankWidth - 3, bottom - top - 5);
   }
 }
 function showToast(text, ms=1600) {
@@ -618,11 +748,35 @@ function createSeededRng(seed) {
    ========================================================= */
 const searchParams = new URLSearchParams(location.search);
 const savedState = safeLoadSave();
+const LEGACY_LEVEL_ID_MAP = {
+  l1: "adventure",
+  l2: "remix",
+  l3: "remix"
+};
+function normalizeLevelId(levelId) {
+  const normalized = String(levelId || "").trim();
+  if (!normalized) return "";
+  if (LEVEL_CONFIG[normalized]) return normalized;
+  return LEGACY_LEVEL_ID_MAP[normalized] || "";
+}
+function normalizeWinsByProfile(raw) {
+  if (!raw || typeof raw !== "object") return {};
+  const out = {};
+  for (const [profileKey, value] of Object.entries(raw)) {
+    if (!Number.isFinite(Number(value))) continue;
+    const [kidId, levelId] = String(profileKey).split(":");
+    if (!kidId) continue;
+    const normalizedLevel = normalizeLevelId(levelId) || levelId;
+    const normalizedKey = `${kidId}:${normalizedLevel}`;
+    out[normalizedKey] = (out[normalizedKey] || 0) + Number(value);
+  }
+  return out;
+}
 const queryKid = searchParams.get("kid");
-const queryLevel = searchParams.get("level");
+const queryLevel = normalizeLevelId(searchParams.get("level"));
 const querySeed = searchParams.get("seed");
 const savedKid = typeof savedState.kidId === "string" ? savedState.kidId : "";
-const savedLevel = typeof savedState.levelId === "string" ? savedState.levelId : "";
+const savedLevel = normalizeLevelId(typeof savedState.levelId === "string" ? savedState.levelId : "");
 const savedSeed = typeof savedState.seed === "string" ? savedState.seed : "";
 const savedAccessibility = (savedState.accessibility && typeof savedState.accessibility === "object")
   ? savedState.accessibility
@@ -641,7 +795,7 @@ keyBindings = normalizeSavedBindings(savedState.keyBindings);
 let activeSeed = normalizeSeed(querySeed || savedSeed);
 let rng = createSeededRng(activeSeed);
 let totalWins = Number.isFinite(savedState.totalWins) ? Number(savedState.totalWins) : 0;
-const winsByProfile = (savedState.winsByProfile && typeof savedState.winsByProfile === "object") ? savedState.winsByProfile : {};
+const winsByProfile = normalizeWinsByProfile(savedState.winsByProfile);
 const accessibility = {
   highContrast: Boolean(savedAccessibility.highContrast),
   colorblindIndicators: Boolean(savedAccessibility.colorblindIndicators)
@@ -744,7 +898,15 @@ function populateKidSelector() {
     const label = ASSET_CONFIG[activeKidId].displayName || activeKidId;
     showToast(`Now playing as ${label}`);
     WORLD.resetPlayerToStart(false);
+    restoreGameFocus();
   });
+}
+
+function syncModeTips() {
+  const tips = document.getElementById("modeTips");
+  const mode = LEVEL_CONFIG[activeLevelId] || LEVEL_CONFIG[DEFAULT_LEVEL_ID];
+  if (!tips || !mode) return;
+  tips.textContent = mode.description || "";
 }
 
 function populateLevelSelector() {
@@ -758,15 +920,18 @@ function populateLevelSelector() {
     select.appendChild(opt);
   });
   select.value = activeLevelId;
+  syncModeTips();
   select.addEventListener("change", (event) => {
     const nextId = event.target.value;
     if (!LEVEL_CONFIG[nextId]) return;
     activeLevelId = nextId;
     activeLevelName = LEVEL_CONFIG[activeLevelId]?.label || LEVEL_CONFIG[DEFAULT_LEVEL_ID].label;
+    syncModeTips();
     syncQueryParams();
     saveProgress();
-    showToast(`Level set to ${activeLevelName}`);
+    showToast(`Mode set to ${activeLevelName}`);
     WORLD.resetAll();
+    restoreGameFocus();
   });
 }
 
@@ -780,9 +945,10 @@ function syncQueryParams() {
 
 function updateAdventureTitle() {
   const titleEl = document.getElementById("gameTitle");
-  if (!titleEl) return;
   const suffix = activeKidName.endsWith("s") ? "'" : "'s";
-  titleEl.textContent = `${activeKidName}${suffix} Adventure`;
+  const nextTitle = `${activeKidName}${suffix} Adventure`;
+  if (titleEl) titleEl.textContent = nextTitle;
+  document.title = `${nextTitle} - Kid Adventure`;
 }
 
 loadKidAssets(activeKidId);
@@ -859,7 +1025,25 @@ class Item {
     const def = itemDef(this.kind);
     const img = def.imageKey ? IMAGES[def.imageKey] : null;
     const label = def.label ? def.label.toUpperCase() : this.kind.toUpperCase();
-    drawImageOrFallback(img, r, def.color || "#888", label);
+    drawItemPlate(r, def.color || "#888");
+    if (normalizeKeyKind(this.kind).startsWith("key-")) {
+      drawAdventureKey(r, this.kind, def.color || "#888");
+    } else if (this.kind === "bridge") {
+      drawBridgeItem(r, def.color || "#8bc6ff");
+    } else {
+      const artRect = { x: r.x + 2, y: r.y + 2, w: r.w - 4, h: r.h - 4 };
+      drawImageOrFallback(img, artRect, def.color || "#888", label);
+      drawAdventureSigil(
+        { x: r.x + r.w - 16, y: r.y + 2, w: 12, h: 12 },
+        this.kind,
+        {
+          strokeStyle: "#10151c",
+          fillStyle: "rgba(255,255,255,0.7)",
+          lineWidth: 2,
+          scale: 0.6
+        }
+      );
+    }
     outlineRect(r, "rgba(0,0,0,.35)");
   }
 }
@@ -1290,20 +1474,25 @@ const WORLD = {
   currentRoomId: START_ROOM_ID,
   currentLayoutId: null,
   currentLayoutName: "",
+  currentModeName: "",
   player: new Player(),
   bat: null,
   recoveryTimer: 2.5,
   buildRandomLayout() {
     const level = LEVEL_CONFIG[activeLevelId] || LEVEL_CONFIG[DEFAULT_LEVEL_ID];
-    const variantIds = (level?.variants || []).filter(id => LAYOUT_VARIANTS[id]);
+    const variantIds = (level?.variants || []).filter((id) => LAYOUT_VARIANTS[id]);
     const fallbackIds = Object.keys(LAYOUT_VARIANTS);
     const idsToUse = variantIds.length ? variantIds : fallbackIds;
-    let pool = idsToUse.filter(id => id !== this.currentLayoutId);
-    if (!pool.length) pool = idsToUse;
-    const choiceId = pool[Math.floor(random() * pool.length)];
+    let choiceId = idsToUse[0];
+    if (idsToUse.length > 1) {
+      let pool = idsToUse.filter((id) => id !== this.currentLayoutId);
+      if (!pool.length) pool = idsToUse;
+      choiceId = pool[Math.floor(random() * pool.length)];
+    }
     const variant = LAYOUT_VARIANTS[choiceId];
     this.currentLayoutId = choiceId;
-    this.currentLayoutName = `${level.label} · ${variant.label}`;
+    this.currentModeName = level.label;
+    this.currentLayoutName = variant.label;
     variant.builder(this);
   },
   addItemToRoom(item, roomId) {
@@ -1445,8 +1634,9 @@ const WORLD = {
     this.recoveryTimer = 2.5;
     state.winTimer = 0;
     state.hasWonThisRun = false;
-    if (this.currentLayoutName) {
-      showToast(`Layout: ${this.currentLayoutName}`, 2000);
+    const layoutLabel = LAYOUT_VARIANTS[this.currentLayoutId]?.label || this.currentLayoutName;
+    if (layoutLabel) {
+      showToast(`${activeLevelName}: ${layoutLabel}`, 2000);
     }
     saveProgress();
   }
@@ -2901,7 +3091,7 @@ function loop(ts) {
 
   // toggles
   if (actionPressed("pause")) { state.paused = !state.paused; showToast(state.paused ? "Paused" : "Resumed"); }
-  if (actionPressed("reset")) { WORLD.resetAll(); showToast("Reset"); }
+  if (actionPressed("reset")) { WORLD.resetAll(); showToast("Quest restarted"); }
   if (actionPressed("debug")) {
     setDebugEnabled(!debugState.enabled);
     showToast(debugState.enabled ? "Debug on" : "Debug off");
@@ -2945,7 +3135,7 @@ function renderHUD() {
   const room = WORLD.current();
   const holding = WORLD.player.holding ? itemDisplayName(WORLD.player.holding.kind) : "";
   const gateState = room.gate ? (room.gate.open ? "Open" : "Closed") : "";
-  const layoutName = WORLD.currentLayoutName || "";
+  const layoutName = LAYOUT_VARIANTS[WORLD.currentLayoutId]?.label || WORLD.currentLayoutName || "";
   const profileWins = winsForCurrentProfile();
   const nextState = [
     activeLevelName,
@@ -2962,7 +3152,7 @@ function renderHUD() {
   lastHudState = nextState;
   hud.innerHTML = "";
   const tag = (t)=>{ const el=document.createElement("div"); el.className="tag"; el.textContent=t; return el; };
-  hud.append(tag(`Level: ${activeLevelName}`));
+  hud.append(tag(`Mode: ${activeLevelName}`));
   hud.append(tag(`Kid: ${activeKidName}`));
   hud.append(tag(`Seed: ${activeSeed}`));
   if (layoutName) {
@@ -3000,11 +3190,12 @@ function renderDebugOverlay(dt=0) {
    Buttons
    ========================================================= */
 
-document.getElementById("btnReset").addEventListener("click", ()=>{ WORLD.resetAll(); showToast("Reset"); });
-document.getElementById("btnPause").addEventListener("click", ()=>{ state.paused=!state.paused; showToast(state.paused ? "Paused" : "Resumed"); });
+document.getElementById("btnReset").addEventListener("click", ()=>{ WORLD.resetAll(); showToast("Quest restarted"); restoreGameFocus(); });
+document.getElementById("btnPause").addEventListener("click", ()=>{ state.paused=!state.paused; showToast(state.paused ? "Paused" : "Resumed"); restoreGameFocus(); });
 document.getElementById("btnDebug").addEventListener("click", ()=>{
   setDebugEnabled(!debugState.enabled);
   showToast(debugState.enabled ? "Debug on" : "Debug off");
+  restoreGameFocus();
 });
 
 function setupTouchControls() {
@@ -3027,6 +3218,7 @@ function setupTouchControls() {
     const dir = btn.getAttribute("data-dir");
     const start = (ev) => {
       ev.preventDefault();
+      restoreGameFocus();
       if (typeof btn.setPointerCapture === "function") {
         btn.setPointerCapture(ev.pointerId);
       }
@@ -3049,6 +3241,7 @@ function setupTouchControls() {
     btn.addEventListener("pointerdown", (ev) => {
       ev.preventDefault();
       _touchActions[action] = true;
+      restoreGameFocus();
     });
   });
 }
@@ -3059,5 +3252,7 @@ function setupTouchControls() {
 
 WORLD.resetAll();
 setupTouchControls();
+restoreGameFocus();
 requestAnimationFrame((t)=>{ last=t; requestAnimationFrame(loop); });
+
 

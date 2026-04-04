@@ -53,9 +53,11 @@ def main() -> int:
 
     if "## How to Play" not in readme_text:
         warnings.append("README.md is missing the expected How to Play section.")
+    if "Adventure Mode" not in readme_text or "Remix Mode" not in readme_text:
+        warnings.append("README.md may be missing the current Adventure/Remix mode guidance.")
 
-    if "Update `ASSET_CONFIG` in `index.html`" not in assets_readme_text:
-        warnings.append("assets/README.md may be missing ASSET_CONFIG guidance.")
+    if "ASSET_CONFIG` in `js/content-config.js`" not in assets_readme_text:
+        warnings.append("assets/README.md may be missing current ASSET_CONFIG guidance.")
 
     asset_paths = extract_asset_paths(content_config_js_text)
     for rel_path in asset_paths:

@@ -40,21 +40,19 @@ export const ASSET_CONFIG = {
 };
 
 export const LEVEL_CONFIG = {
-  l1: {
-    label: "Level 1 - Garden Patrol",
-    variants: ["classic", "shuffled"]
+  adventure: {
+    label: "Adventure Mode",
+    description: "Stable, Atari-inspired castle quest.",
+    variants: ["classic"]
   },
-  l2: {
-    label: "Level 2 - Labyrinth Trek",
-    variants: ["labyrinth", "catacombs"]
-  },
-  l3: {
-    label: "Level 3 - Dragon Gauntlet",
-    variants: ["highlands", "gauntlet"]
+  remix: {
+    label: "Remix Mode",
+    description: "Rotates through larger family remix maps.",
+    variants: ["shuffled", "labyrinth", "catacombs", "highlands", "gauntlet"]
   }
 };
 
-export const DEFAULT_LEVEL_ID = "l1";
+export const DEFAULT_LEVEL_ID = "adventure";
 
 export const ITEM_DEFS = {
   sword: { label: "Sword", color: "#dfe6ef", imageKey: "sword" },
