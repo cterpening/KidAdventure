@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-04-03
+- Reframed the game around two clearer modes: a stable default `Adventure Mode` and a rotating `Remix Mode`.
+- Migrated older `l1` / `l2` / `l3` save and query-state values into the new mode model.
+- Improved keyboard consistency by restoring canvas focus after sidebar and touch interactions.
+- Gave keys, bridge, sword, and trophy stronger in-game icon treatment so they read more clearly at play scale.
+- Updated README, asset docs, and project-direction docs to match the shipped static-canvas implementation.
+
 ## 2026-02-20
 - Added deterministic RNG support via `?seed=<value>` and routed gameplay randomness through a seeded generator.
 - Added `localStorage` persistence for kid/level/seed selection and win counters.

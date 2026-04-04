@@ -1,15 +1,25 @@
-# Kid asset folders
+# Asset Notes
 
-Place per-kid art inside `assets/kids/<kidId>/` so the canvas prototype can load them automatically.
+KidAdventure uses shared world-item art plus per-kid player art.
 
-- Required per kid:
-  - `player.png`
-- Shared defaults (used by all kids unless you override paths in `ASSET_CONFIG`):
-  - `assets/common/dragon.png`
-  - `assets/common/dragon-dead.png`
-  - `assets/common/key.png`
-  - `assets/common/sword.png`
-  - `assets/common/trophy.png`
-  - `assets/common/bat.svg`
+## Kid Folders
+- Put each player's art in `assets/kids/<kidId>/player.png`.
+- Keep transparent backgrounds when possible.
+- Match the existing proportions so collision and pickup visuals still read well at game scale.
 
-Update `ASSET_CONFIG` in `index.html` to register each kid id (and optional display name) with paths to their art. At runtime you can switch kids with the `?kid=<kidId>` query string (e.g., `index.html?kid=alex`).
+## Shared Art
+- `assets/common/dragon.png`
+- `assets/common/dragon-dead.png`
+- `assets/common/key.png`
+- `assets/common/sword.png`
+- `assets/common/trophy.png`
+- `assets/common/bat.svg`
+
+## Registering New Kids
+- Add the kid entry to `ASSET_CONFIG` in `js/content-config.js`.
+- Point the `player` path at the new `assets/kids/<kidId>/player.png`.
+- If a kid needs custom shared art overrides, update that same config entry with kid-specific paths.
+
+## Runtime Notes
+- The game scales art to the active entity size at runtime.
+- Keys, bridge, sword, and trophy now have extra shape-driven presentation in code so they read clearly even when the source image is minimal.

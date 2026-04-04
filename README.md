@@ -1,54 +1,59 @@
 # KidAdventure
 
-Kid Adventure is a browser-based tribute to the Atari 2600 classic. Pick a kid-specific hero, explore maze-like overworlds, defeat dragons with the sword, unlock castles with the key, and haul the trophy back to the starting pedestal.
+KidAdventure is a family-photo remake of Atari 2600 Adventure. The goal is a recognizable Adventure-style quest first: carry one item at a time, dodge dragons, unlock castles with keys, survive the bat, and bring the trophy back to the pedestal. The project adds polish through better room landmarks, family-specific player art, and an optional remix mode instead of rewriting the core game loop.
+
+## Game Modes
+- `Adventure Mode` is the default experience. It keeps one stable overworld so players can learn routes, remember item locations, and build the same kind of map memory that makes the original game feel satisfying.
+- `Remix Mode` keeps the same rules and items, but rotates through larger, more bespoke maps for variety once the classic-feeling run is familiar.
 
 ## How to Play
-- Move with WASD/arrow keys or the on-screen D-pad (tablets/phones).
-- Press `E` / "Use" to pick up items; `Q` / "Drop" sets them down.
-- Match yellow, black, and green keys to their gates. The white key opens any gate.
-- The bridge lets you pass through walls while you carry it.
-- The bat steals items and moves them between rooms, so expect surprises.
-- Defeat dragons with the sword, then bring the trophy back to the start pedestal.
-- Add `?seed=<value>` to the URL for deterministic layout/enemy randomness during debugging.
-- Remap controls in the in-game "Key Bindings" section (saved in local storage).
+- Move with `WASD`, arrow keys, or the touch D-pad.
+- Press `E` or `Use / Pick` to grab an item.
+- Press `Q` or `Drop` to set the held item down.
+- Carry the `sword` to defeat dragons.
+- Carry the `bridge` to move through walls.
+- Match the yellow, black, and green keys to their castle gates. The white key opens any gate.
+- Survive the bat, which steals loose items and can carry them into other rooms.
+- Return the `trophy` to the start pedestal to win.
 
 ## Custom Kid Art
-- Drop PNGs or JPGs into `assets/kids/<kidId>/` named `player.png`.
-- Shared art (dragon, dragon-dead, key, sword, trophy) lives under `assets/common/`.
-- To override shared art for a specific kid, point that kid's `ASSET_CONFIG` paths at kid-local files.
-- Register new kids or swap art by editing `ASSET_CONFIG` in `index.html`.
+- Put each kid's portrait/sprite at `assets/kids/<kidId>/player.png`.
+- Shared item/enemy art lives in `assets/common/`.
+- Register kids and asset paths in `js/content-config.js`.
+- You can start directly on a kid with `?kid=<kidId>`.
 
-## Deployment
-1. Commit the static files (no build step required) to your repo.
-2. Enable GitHub Pages for the `main` branch/root to host `index.html`.
-3. Open `https://<you>.github.io/<repo>/` to play on desktop or mobile.
+## Project Direction
+- Keep the base rule set close to Adventure.
+- Put originality into room flavor, castle silhouettes, family art, and cleaner item presentation.
+- Prefer one strong default world over constant randomization.
+- Keep remix content optional so the main game still feels teachable and consistent.
+
+## Development
+- This is a static project. There is no build step.
+- Open `index.html` directly in a browser, or serve the folder with a tiny static server if you prefer.
+- Useful query params:
+- `?kid=<kidId>`
+- `?level=adventure|remix`
+- `?seed=<value>`
 
 ## Quality Checks
-- Run `python tools/qa_checks.py` to execute lightweight lint/smoke checks.
-- The check validates core file structure and that all assets referenced in `ASSET_CONFIG` exist on disk.
-- Run `python tools/layout_checks.py` to validate layout graph integrity (neighbor targets, start-room reachability, and secret-door targets).
-- Run `python tools/gameplay_regressions.py` to validate gameplay invariants (keys/gates/dragons/trophy/pedestal and seeded randomness wiring).
+- Run `python tools/qa_checks.py` for lightweight repository and documentation checks.
+- Run `python tools/layout_checks.py` to validate room graph and secret-door connectivity.
+- Run `python tools/gameplay_regressions.py` to validate item, dragon, gate, pedestal, and seeded-randomness invariants.
 
 ## Persistence
-- The game saves selected kid, level, seed, and win counters in `localStorage` (`kidAdventure.save.v1`).
-- Accessibility settings and key bindings are persisted in the same save object.
+- Save data is stored in `localStorage` under `kidAdventure.save.v1`.
+- The save includes selected kid, selected mode, seed, win counters, accessibility options, debug mode, and key bindings.
+- Older `l1` / `l2` / `l3` save values are migrated into the newer `adventure` / `remix` mode model at runtime.
 
 ## Accessibility
-- Toggle high contrast mode from the sidebar.
-- Enable colorblind gate symbols to add shape indicators to gate types.
-
-## Debugging
-- Toggle the debug overlay via the `Debug` button or mapped debug key.
-- Overlay mode draws hitboxes and room/runtime diagnostics.
-- A runtime recovery pass periodically nudges blocked items to safe reachable spots.
+- High contrast mode is available in the sidebar.
+- Colorblind gate symbols can be enabled from the sidebar.
+- Item icons now also use shape cues so the keys stay readable even when colors are similar.
 
 ## Code Layout
-- `index.html` contains markup/styles and loads the game via `js/game.js`.
-- `js/constants.js` contains shared canvas constants.
-- `js/content-config.js` contains kid/level/item config data.
-- `js/game.js` contains runtime systems (engine, entities, maps, UI integration).
-
-## Changelog
-- **2025-11-19** – Added multi-kid selector, custom art manifest, and virtual touch controls.
-- **2025-11-19** – Implemented multi-room layouts, dragon AI, castle silhouettes, and random layout rotation.
-- **2025-11-19** – Introduced Level 1/2/3 selector with sprawling Catacombs, Highlands, and Dragon Gauntlet maps, plus HUD/layout toasts.
+- `index.html` contains the page structure, styles, and UI shell.
+- `js/constants.js` contains canvas constants.
+- `js/content-config.js` contains kid, mode, and item configuration.
+- `js/game.js` contains the runtime, entity logic, rendering, rooms, and UI integration.
+- `tools/` contains dependency-free validation scripts for docs, layouts, and gameplay invariants.
