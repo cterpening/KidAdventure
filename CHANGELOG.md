@@ -5,6 +5,7 @@
 - Migrated older `l1` / `l2` / `l3` save and query-state values into the new mode model.
 - Improved keyboard consistency by restoring canvas focus after sidebar and touch interactions.
 - Gave keys, bridge, sword, and trophy stronger in-game icon treatment so they read more clearly at play scale.
+- Added `tools/gameplay_browser_smoke.py` so gameplay iteration can be validated in a real browser, not just through static checks.
 - Updated README, asset docs, and project-direction docs to match the shipped static-canvas implementation.
 
 ## 2026-02-20

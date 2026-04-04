@@ -3186,6 +3186,91 @@ function renderDebugOverlay(dt=0) {
   overlay.classList.add("show");
 }
 
+function createRoomSnapshot(room) {
+  if (!room) return null;
+  return {
+    id: room.id,
+    name: room.name,
+    neighbors: { ...room.neighbors },
+    gate: room.gate ? {
+      open: room.gate.open,
+      requiredKey: room.gate.requiredKey,
+      targetRoom: room.gate.targetRoom,
+      rect: { ...room.gate.rect }
+    } : null,
+    items: room.items
+      .filter((item) => item.alive && !item.heldBy)
+      .map((item) => ({
+        kind: item.kind,
+        x: item.x,
+        y: item.y,
+        w: item.w,
+        h: item.h
+      })),
+    enemies: room.enemies
+      .filter((enemy) => enemy.alive)
+      .map((enemy) => ({
+        x: enemy.x,
+        y: enemy.y,
+        w: enemy.w,
+        h: enemy.h
+      })),
+    pedestal: room.pedestal ? { ...room.pedestal } : null
+  };
+}
+
+function createGameplaySnapshot() {
+  const room = WORLD.current();
+  return {
+    activeKidId,
+    activeKidName,
+    activeLevelId,
+    activeLevelName,
+    activeSeed,
+    currentLayoutId: WORLD.currentLayoutId,
+    currentLayoutName: LAYOUT_VARIANTS[WORLD.currentLayoutId]?.label || WORLD.currentLayoutName || "",
+    currentRoomId: WORLD.currentRoomId,
+    player: {
+      x: WORLD.player.x,
+      y: WORLD.player.y,
+      w: WORLD.player.w,
+      h: WORLD.player.h,
+      holding: WORLD.player.holding ? WORLD.player.holding.kind : null
+    },
+    room: createRoomSnapshot(room),
+    bat: WORLD.bat ? {
+      roomId: WORLD.bat.roomId,
+      carrying: WORLD.bat.carrying ? WORLD.bat.carrying.kind : null
+    } : null,
+    paused: state.paused,
+    winTimer: state.winTimer
+  };
+}
+
+globalThis.__kidAdventureTest = {
+  getSnapshot() {
+    return createGameplaySnapshot();
+  },
+  reset() {
+    WORLD.resetAll();
+    return createGameplaySnapshot();
+  },
+  setPlayerPosition(x, y) {
+    WORLD.player.x = clamp(Number(x) || 0, 16, W - WORLD.player.w - 16);
+    WORLD.player.y = clamp(Number(y) || 0, 16, H - WORLD.player.h - 16);
+    if (WORLD.player.holding) {
+      WORLD.player.holding.x = WORLD.player.x + WORLD.player.w + 4;
+      WORLD.player.holding.y = WORLD.player.y + (WORLD.player.h - WORLD.player.holding.h) / 2;
+    }
+    return createGameplaySnapshot();
+  },
+  transitionToRoom(roomId) {
+    if (!WORLD.rooms[roomId]) return null;
+    WORLD.transitionTo(roomId, "default", { silent: true });
+    return createGameplaySnapshot();
+  }
+};
+
 /* =========================================================
    Buttons
    ========================================================= */

@@ -40,6 +40,7 @@ KidAdventure is a family-photo remake of Atari 2600 Adventure. The goal is a rec
 - Run `python tools/qa_checks.py` for lightweight repository and documentation checks.
 - Run `python tools/layout_checks.py` to validate room graph and secret-door connectivity.
 - Run `python tools/gameplay_regressions.py` to validate item, dragon, gate, pedestal, and seeded-randomness invariants.
+- Run `python tools/gameplay_browser_smoke.py` for a browser-driven smoke test that exercises live movement, pickup/drop flow, mode switching, and room loading.
 
 ## Persistence
 - Save data is stored in `localStorage` under `kidAdventure.save.v1`.
