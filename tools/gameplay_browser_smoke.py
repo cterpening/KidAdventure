@@ -25,6 +25,10 @@ def snapshot(page) -> dict:
     return page.evaluate("window.__kidAdventureTest.getSnapshot()")
 
 
+def bindings(page) -> dict:
+    return page.evaluate("window.__kidAdventureTest.getBindings()")
+
+
 def wait_for(predicate, timeout: float = 5.0, interval: float = 0.05) -> None:
     deadline = time.time() + timeout
     while time.time() < deadline:
@@ -100,11 +104,32 @@ def run_smoke() -> None:
             page.keyboard.press("q")
             wait_for(lambda: snapshot(page)["player"]["holding"] is None)
 
+            page.locator("#bindGrid .bind-btn").filter(has_text="Pause:").click()
+            page.keyboard.press("e")
+            wait_for(lambda: bindings(page)["pause"] == ["e"])
+            wait_for(lambda: bindings(page)["interact"] == ["p"])
+
+            page.evaluate("window.__kidAdventureTest.reset()")
+            page.locator("#game").click()
+            place_player_on_item(page, "sword")
+            page.keyboard.press("p")
+            wait_for(lambda: snapshot(page)["player"]["holding"] == "sword")
+            page.keyboard.press("e")
+            wait_for(lambda: snapshot(page)["paused"] is True)
+            page.keyboard.press("e")
+            wait_for(lambda: snapshot(page)["paused"] is False)
+
             page.select_option("#levelSelect", "remix")
             wait_for(lambda: snapshot(page)["activeLevelId"] == "remix")
             remix = snapshot(page)
             assert remix["currentLayoutId"] in {"shuffled", "labyrinth", "catacombs", "highlands", "gauntlet"}, remix
             assert remix["room"] is not None, remix
+
+            remix_layout = remix["currentLayoutId"]
+            first_reset = page.evaluate("window.__kidAdventureTest.reset()")
+            second_reset = page.evaluate("window.__kidAdventureTest.reset()")
+            assert first_reset["currentLayoutId"] == remix_layout, first_reset
+            assert second_reset["currentLayoutId"] == remix_layout, second_reset
 
             page.evaluate(
                 """
@@ -122,6 +147,13 @@ def run_smoke() -> None:
                 lambda: snapshot(page)["currentRoomId"] != remix["currentRoomId"],
                 timeout=3.0,
             )
+
+            previous_seed = snapshot(page)["activeSeed"]
+            rerolled = page.evaluate("window.__kidAdventureTest.newRun()")
+            assert rerolled["activeSeed"] != previous_seed, rerolled
+            assert rerolled["currentLayoutId"] in {"shuffled", "labyrinth", "catacombs", "highlands", "gauntlet"}, rerolled
+            rerolled_reset = page.evaluate("window.__kidAdventureTest.reset()")
+            assert rerolled_reset["currentLayoutId"] == rerolled["currentLayoutId"], rerolled_reset
         except PlaywrightTimeoutError as exc:
             raise AssertionError(f"Browser test timed out: {exc}") from exc
         finally:

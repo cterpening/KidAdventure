@@ -92,6 +92,65 @@ function actionPressed(action) {
   return false;
 }
 
+function keyUsedByOtherAction(key, exceptAction) {
+  if (!key) return false;
+  for (const [action, bindings] of Object.entries(keyBindings)) {
+    if (action === exceptAction) continue;
+    if ((bindings || []).includes(key)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function chooseReplacementBinding(action, preferredKeys=[]) {
+  const candidates = [...preferredKeys, ...(DEFAULT_KEY_BINDINGS[action] || [])]
+    .map((key) => normalizeKeyName(key))
+    .filter(Boolean);
+  for (const candidate of candidates) {
+    if (!keyUsedByOtherAction(candidate, action)) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+function assignBinding(action, key) {
+  const nextKey = normalizeKeyName(key);
+  if (!nextKey || !ACTION_LABELS[action]) return null;
+
+  const previousKeys = Array.from(new Set((keyBindings[action] || []).filter(Boolean)));
+  const freedKeys = previousKeys.filter((existingKey) => existingKey !== nextKey);
+  const displacedActions = [];
+
+  for (const otherAction of Object.keys(keyBindings)) {
+    if (otherAction === action) continue;
+    const bindings = keyBindings[otherAction] || [];
+    if (!bindings.includes(nextKey)) continue;
+    keyBindings[otherAction] = bindings.filter((binding) => binding !== nextKey);
+    displacedActions.push(otherAction);
+  }
+
+  keyBindings[action] = [nextKey];
+
+  for (const displacedAction of displacedActions) {
+    if ((keyBindings[displacedAction] || []).length) continue;
+    const replacement = chooseReplacementBinding(displacedAction, freedKeys);
+    if (!replacement) continue;
+    keyBindings[displacedAction] = [replacement];
+    const releaseIndex = freedKeys.indexOf(replacement);
+    if (releaseIndex >= 0) {
+      freedKeys.splice(releaseIndex, 1);
+    }
+  }
+
+  return {
+    action,
+    key: nextKey,
+    displacedActions
+  };
+}
+
 function shouldCaptureKey(e) {
   const tag = e.target?.tagName;
   return !tag || !KEY_CAPTURE_TAGS.has(tag);
@@ -107,7 +166,7 @@ addEventListener("keydown", (e) => {
       return;
     }
     const boundAction = awaitingBindAction;
-    keyBindings[boundAction] = [key];
+    assignBinding(boundAction, key);
     awaitingBindAction = null;
     renderKeyBindingControls();
     syncControlHints();
@@ -793,7 +852,7 @@ if ((!queryLevel || !LEVEL_CONFIG[queryLevel]) && savedLevel && LEVEL_CONFIG[sav
 let activeLevelName = LEVEL_CONFIG[activeLevelId]?.label || LEVEL_CONFIG[DEFAULT_LEVEL_ID].label;
 keyBindings = normalizeSavedBindings(savedState.keyBindings);
 let activeSeed = normalizeSeed(querySeed || savedSeed);
-let rng = createSeededRng(activeSeed);
+let rng = createSeededRng(`${activeLevelId}:${activeSeed}:runtime`);
 let totalWins = Number.isFinite(savedState.totalWins) ? Number(savedState.totalWins) : 0;
 const winsByProfile = normalizeWinsByProfile(savedState.winsByProfile);
 const accessibility = {
@@ -807,6 +866,25 @@ const IMAGES = { player: null, dragon: null, dragonDead: null, key: null, sword:
 
 function random() {
   return rng();
+}
+
+function rebuildRunRng() {
+  rng = createSeededRng(`${activeLevelId}:${activeSeed}:runtime`);
+}
+
+function layoutVariantIdsForLevel(levelId) {
+  const level = LEVEL_CONFIG[levelId] || LEVEL_CONFIG[DEFAULT_LEVEL_ID];
+  const variantIds = (level?.variants || []).filter((id) => LAYOUT_VARIANTS[id]);
+  if (variantIds.length) return variantIds;
+  return Object.keys(LAYOUT_VARIANTS);
+}
+
+function chooseLayoutVariantId(levelId, seed) {
+  const idsToUse = layoutVariantIdsForLevel(levelId);
+  if (!idsToUse.length) return null;
+  if (idsToUse.length === 1) return idsToUse[0];
+  const index = hashSeed(`${levelId}:${seed}:layout`) % idsToUse.length;
+  return idsToUse[index];
 }
 
 function saveProgress() {
@@ -838,7 +916,7 @@ function recordWinProgress() {
 
 function reseed(seed) {
   activeSeed = normalizeSeed(seed);
-  rng = createSeededRng(activeSeed);
+  rebuildRunRng();
   syncQueryParams();
   saveProgress();
 }
@@ -1480,15 +1558,7 @@ const WORLD = {
   recoveryTimer: 2.5,
   buildRandomLayout() {
     const level = LEVEL_CONFIG[activeLevelId] || LEVEL_CONFIG[DEFAULT_LEVEL_ID];
-    const variantIds = (level?.variants || []).filter((id) => LAYOUT_VARIANTS[id]);
-    const fallbackIds = Object.keys(LAYOUT_VARIANTS);
-    const idsToUse = variantIds.length ? variantIds : fallbackIds;
-    let choiceId = idsToUse[0];
-    if (idsToUse.length > 1) {
-      let pool = idsToUse.filter((id) => id !== this.currentLayoutId);
-      if (!pool.length) pool = idsToUse;
-      choiceId = pool[Math.floor(random() * pool.length)];
-    }
+    const choiceId = chooseLayoutVariantId(activeLevelId, activeSeed) || Object.keys(LAYOUT_VARIANTS)[0];
     const variant = LAYOUT_VARIANTS[choiceId];
     this.currentLayoutId = choiceId;
     this.currentModeName = level.label;
@@ -1627,6 +1697,7 @@ const WORLD = {
     }
   },
   resetAll() {
+    rebuildRunRng();
     this.player = new Player();
     this.bat = null;
     this.buildRandomLayout();
@@ -3251,6 +3322,14 @@ globalThis.__kidAdventureTest = {
   getSnapshot() {
     return createGameplaySnapshot();
   },
+  getBindings() {
+    return JSON.parse(JSON.stringify(keyBindings));
+  },
+  newRun(seed) {
+    reseed(seed || autoSeed());
+    WORLD.resetAll();
+    return createGameplaySnapshot();
+  },
   reset() {
     WORLD.resetAll();
     return createGameplaySnapshot();
@@ -3276,6 +3355,11 @@ globalThis.__kidAdventureTest = {
    ========================================================= */
 
 document.getElementById("btnReset").addEventListener("click", ()=>{ WORLD.resetAll(); showToast("Quest restarted"); restoreGameFocus(); });
+document.getElementById("btnNewRun").addEventListener("click", ()=>{
+  reseed(autoSeed());
+  WORLD.resetAll();
+  restoreGameFocus();
+});
 document.getElementById("btnPause").addEventListener("click", ()=>{ state.paused=!state.paused; showToast(state.paused ? "Paused" : "Resumed"); restoreGameFocus(); });
 document.getElementById("btnDebug").addEventListener("click", ()=>{
   setDebugEnabled(!debugState.enabled);

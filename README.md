@@ -10,6 +10,7 @@ KidAdventure is a family-photo remake of Atari 2600 Adventure. The goal is a rec
 - Move with `WASD`, arrow keys, or the touch D-pad.
 - Press `E` or `Use / Pick` to grab an item.
 - Press `Q` or `Drop` to set the held item down.
+- Use `New Run` when you want a fresh seeded remix layout without losing deterministic resets for the current run.
 - Carry the `sword` to defeat dragons.
 - Carry the `bridge` to move through walls.
 - Match the yellow, black, and green keys to their castle gates. The white key opens any gate.
@@ -35,6 +36,7 @@ KidAdventure is a family-photo remake of Atari 2600 Adventure. The goal is a rec
 - `?kid=<kidId>`
 - `?level=adventure|remix`
 - `?seed=<value>`
+- Resetting a run keeps the same seed and layout. Use `New Run` or change `?seed=` to reroll.
 
 ## Quality Checks
 - Run `python tools/qa_checks.py` for lightweight repository and documentation checks.
