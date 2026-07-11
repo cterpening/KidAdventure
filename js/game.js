@@ -374,6 +374,114 @@ function drawWallRect(r, color="#2a3340", stroke="#11161d") {
   ctx.lineWidth = 2;
   ctx.strokeRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2);
 }
+function hexToRgb(hex) {
+  const value = String(hex || "").replace("#", "");
+  const normalized = value.length === 3
+    ? value.split("").map((ch) => ch + ch).join("")
+    : value.padEnd(6, "0").slice(0, 6);
+  const parsed = Number.parseInt(normalized, 16);
+  return {
+    r: (parsed >> 16) & 255,
+    g: (parsed >> 8) & 255,
+    b: parsed & 255
+  };
+}
+function rgbaFromHex(hex, alpha) {
+  const rgb = hexToRgb(hex);
+  return `rgba(${rgb.r},${rgb.g},${rgb.b},${alpha})`;
+}
+function roomMood(room) {
+  const text = `${room?.id || ""} ${room?.name || ""}`.toLowerCase();
+  if (/river|lake|coast|harbor|delta|water/.test(text)) return "water";
+  if (/forest|woods|meadow|field|ridge|highland|tangle/.test(text)) return "wild";
+  if (/swamp|marsh|mire|bog/.test(text)) return "swamp";
+  if (/dragon|lava|ash|inferno|lair/.test(text)) return "danger";
+  if (/cave|cavern|catacomb|grotto|vault|depth/.test(text)) return "cavern";
+  if (/castle|hall|gate|keep|fort|tower|citadel|throne/.test(text)) return "castle";
+  return "path";
+}
+function drawRoomFlourish(room) {
+  const mood = roomMood(room);
+  const seed = hashSeed(`${room.id}:flourish`);
+  const t = perfNow() * 0.001;
+  const accentByMood = {
+    water: "#65d7ff",
+    wild: "#79d27a",
+    swamp: "#9ab65d",
+    danger: "#ff735f",
+    cavern: "#a58cff",
+    castle: "#ffd166",
+    path: "#9fb4c9"
+  };
+  const accent = accentByMood[mood] || accentByMood.path;
+
+  ctx.save();
+  if (mood === "water") {
+    ctx.strokeStyle = rgbaFromHex(accent, 0.3);
+    ctx.lineWidth = 3;
+    for (let y = 72; y < H; y += 82) {
+      ctx.beginPath();
+      for (let x = -40; x <= W + 40; x += 24) {
+        const waveY = y + Math.sin((x * 0.025) + t * 1.8 + seed) * 7;
+        if (x === -40) ctx.moveTo(x, waveY); else ctx.lineTo(x, waveY);
+      }
+      ctx.stroke();
+    }
+  } else if (mood === "danger") {
+    ctx.fillStyle = rgbaFromHex(accent, 0.16);
+    for (let i = 0; i < 18; i++) {
+      const x = (seed * (i + 3) * 37) % W;
+      const y = (seed * (i + 7) * 19) % H;
+      const r = 10 + ((seed >> (i % 12)) & 15);
+      ctx.beginPath();
+      ctx.arc(x, y + Math.sin(t * 2 + i) * 4, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else if (mood === "castle") {
+    ctx.strokeStyle = "rgba(255,255,255,0.08)";
+    ctx.lineWidth = 2;
+    for (let x = 36; x < W; x += 96) {
+      ctx.beginPath();
+      ctx.moveTo(x, 24);
+      ctx.lineTo(x + 36, 24);
+      ctx.lineTo(x + 36, 60);
+      ctx.lineTo(x + 72, 60);
+      ctx.stroke();
+    }
+  } else {
+    ctx.fillStyle = rgbaFromHex(accent, mood === "cavern" ? 0.16 : 0.2);
+    for (let i = 0; i < 34; i++) {
+      const x = (seed * (i + 5) * 29) % W;
+      const y = (seed * (i + 11) * 31) % H;
+      const s = 2 + ((seed >> (i % 14)) & 3);
+      ctx.fillRect(x, y, s, s);
+    }
+  }
+  ctx.restore();
+}
+function drawExitCompass(room) {
+  const exits = room?.neighbors || {};
+  const markers = [
+    ["north", W / 2, 18, "N"],
+    ["south", W / 2, H - 18, "S"],
+    ["west", 18, H / 2, "W"],
+    ["east", W - 18, H / 2, "E"]
+  ];
+  ctx.save();
+  ctx.font = "bold 13px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  for (const [dir, x, y, label] of markers) {
+    if (!exits[dir]) continue;
+    ctx.fillStyle = "rgba(244,247,251,0.72)";
+    ctx.beginPath();
+    ctx.arc(x, y, 13, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#10151b";
+    ctx.fillText(label, x, y + 0.5);
+  }
+  ctx.restore();
+}
 function drawAdventureSigil(rect, kind, options={}) {
   const normalizedKind = normalizeKeyKind(kind);
   const scale = options.scale ?? 1;
@@ -568,6 +676,93 @@ function showToast(text, ms=1600) {
   t.classList.add("show");
   clearTimeout(showToast._id);
   showToast._id = setTimeout(()=>t.classList.remove("show"), ms);
+}
+
+function spawnSparkles(x, y, color="#ffd166", count=14) {
+  if (!state?.sparkles) return;
+  for (let i = 0; i < count; i++) {
+    const angle = (i / count) * Math.PI * 2 + random() * 0.35;
+    const speed = 55 + random() * 125;
+    state.sparkles.push({
+      x,
+      y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      size: 3 + random() * 5,
+      life: 0.45 + random() * 0.45,
+      maxLife: 0.8,
+      color
+    });
+  }
+}
+
+function updateSparkles(dt) {
+  if (!state.sparkles.length) return;
+  for (const fx of state.sparkles) {
+    fx.life -= dt;
+    fx.x += fx.vx * dt;
+    fx.y += fx.vy * dt;
+    fx.vy += 40 * dt;
+  }
+  state.sparkles = state.sparkles.filter((fx) => fx.life > 0);
+}
+
+function drawSparkles() {
+  if (!state.sparkles.length) return;
+  ctx.save();
+  for (const fx of state.sparkles) {
+    const alpha = clamp(fx.life / fx.maxLife, 0, 1);
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = fx.color;
+    ctx.fillRect(fx.x - fx.size / 2, fx.y - fx.size / 2, fx.size, fx.size);
+  }
+  ctx.restore();
+}
+
+function currentObjectiveText(room) {
+  if (!room) return "Find the trophy and bring it home.";
+  const holding = WORLD.player?.holding;
+  if (holding?.kind === "trophy") return "Bring the trophy back to the start pedestal.";
+  if (holding?.kind === "sword") {
+    const dangerHere = room.enemies.some((enemy) => enemy.alive);
+    return dangerHere ? "Touch the dragon with the sword." : "Carry the sword into dragon rooms.";
+  }
+  if (holding?.kind === "bridge") return "The bridge lets you slip through walls.";
+  if (holding && normalizeKeyKind(holding.kind).startsWith("key-")) {
+    const keyName = itemDisplayName(holding.kind);
+    return `${keyName}: find the matching castle gate.`;
+  }
+  const trophyHere = room.items.some((item) => item.kind === "trophy" && item.alive && !item.heldBy);
+  if (trophyHere) return "Move to the trophy and press E, then return home.";
+  const itemHere = room.items.find((item) => item.alive && !item.heldBy);
+  if (itemHere) return `Move to ${itemDisplayName(itemHere.kind)} and press E.`;
+  const liveDragon = room.enemies.some((enemy) => enemy.alive);
+  if (liveDragon) return "Dragon room: bring the sword.";
+  if (room.gate && !room.gate.open) return `This gate needs ${itemDisplayName(room.gate.requiredKey)}.`;
+  return "Explore the exits and look for keys, sword, bridge, and trophy.";
+}
+
+function drawQuestBanner(room) {
+  const text = currentObjectiveText(room);
+  const x = 18;
+  const y = 18;
+  const w = Math.min(560, W - 36);
+  const h = 62;
+  ctx.save();
+  ctx.fillStyle = "rgba(10,15,21,0.76)";
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = "rgba(255,255,255,0.18)";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
+  ctx.fillStyle = "#ffd166";
+  ctx.font = "bold 18px system-ui, sans-serif";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "top";
+  ctx.fillText(room.name, x + 16, y + 10);
+  ctx.fillStyle = "#f4f7fb";
+  ctx.font = "14px system-ui, sans-serif";
+  ctx.fillText(text, x + 16, y + 36);
+  ctx.restore();
 }
 
 function drawDebugHitboxes(room) {
@@ -911,6 +1106,7 @@ function recordWinProgress() {
   const key = `${activeKidId}:${activeLevelId}`;
   winsByProfile[key] = winsForCurrentProfile() + 1;
   totalWins += 1;
+  spawnSparkles(W / 2, H / 2, "#ffd166", 44);
   saveProgress();
 }
 
@@ -1061,6 +1257,7 @@ class Gate {
     if (canOpen && rectsTouchOrOverlap(player, this.rect, 2)) {
       this.open = true;
       this.closedColor = gateColorForKey(this.requiredKey);
+      spawnSparkles(this.rect.x + this.rect.w / 2, this.rect.y + this.rect.h / 2, "#ffd166", 24);
       showToast("Gate opened");
     }
   }
@@ -1103,6 +1300,13 @@ class Item {
     const def = itemDef(this.kind);
     const img = def.imageKey ? IMAGES[def.imageKey] : null;
     const label = def.label ? def.label.toUpperCase() : this.kind.toUpperCase();
+    const pulse = 0.45 + 0.25 * Math.sin(perfNow() * 0.005 + r.x * 0.03);
+    ctx.save();
+    ctx.globalAlpha = pulse;
+    ctx.strokeStyle = def.color || "#ffd166";
+    ctx.lineWidth = 3;
+    ctx.strokeRect(r.x - 4, r.y - 4, r.w + 8, r.h + 8);
+    ctx.restore();
     drawItemPlate(r, def.color || "#888");
     if (normalizeKeyKind(this.kind).startsWith("key-")) {
       drawAdventureKey(r, this.kind, def.color || "#888");
@@ -1282,6 +1486,7 @@ class Bat {
       this.carrying = world.player.holding;
       this.carrying.heldBy = null;
       world.player.holding = null;
+      spawnSparkles(this.x + this.w / 2, this.y + this.h / 2, "#a58cff", 16);
       showToast("Bat stole your item!");
     }
   }
@@ -1304,6 +1509,9 @@ class Bat {
     it.x = target.x;
     it.y = target.y;
     world.addItemToRoom(it, this.roomId);
+    if (this.roomId === world.currentRoomId) {
+      spawnSparkles(it.x + it.w / 2, it.y + it.h / 2, itemDef(it.kind).color || "#a58cff", 8);
+    }
   }
   draw() {
     const r = this.rect();
@@ -1380,6 +1588,7 @@ class Player {
           if (it.alive && !it.heldBy && rectsOverlap(this, it)) {
             WORLD.removeItemFromRoom(it);
             this.holding = it; it.heldBy = this;
+            spawnSparkles(this.x + this.w / 2, this.y + this.h / 2, itemDef(it.kind).color || "#ffd166", 12);
             showToast(`Picked up ${itemDisplayName(it.kind)}`);
             break;
           }
@@ -1394,6 +1603,7 @@ class Player {
         it.y = clamp(this.y + (this.h - it.h)/2, 8, H - it.h - 8);
         resolveItemGateOverlap(it, room, this);
         WORLD.addItemToRoom(it, WORLD.currentRoomId);
+        spawnSparkles(it.x + it.w / 2, it.y + it.h / 2, itemDef(it.kind).color || "#ffd166", 8);
         showToast(`Dropped ${itemDisplayName(it.kind)}`);
       }
     }
@@ -1509,10 +1719,14 @@ class Room {
     return this.entryPoints[dir] || this.entryPoints.default || null;
   }
   drawBackdrop() {
-    // mild vignette grid for flavor
-    ctx.fillStyle = this.bgColor;
+    const bg = this.bgColor;
+    const grad = ctx.createRadialGradient(W * 0.5, H * 0.38, 40, W * 0.5, H * 0.38, W * 0.72);
+    grad.addColorStop(0, rgbaFromHex(bg, 1));
+    grad.addColorStop(1, "#070b10");
+    ctx.fillStyle = grad;
     ctx.fillRect(0,0,W,H);
-    ctx.strokeStyle = "#0f141b";
+    drawRoomFlourish(this);
+    ctx.strokeStyle = "rgba(255,255,255,0.055)";
     ctx.lineWidth = 1;
     const grid = 48;
     ctx.beginPath();
@@ -1522,16 +1736,20 @@ class Room {
   }
   draw() {
     this.drawBackdrop();
+    drawExitCompass(this);
     // walls first
     for (const w of this.walls) { drawWallRect(w, "#2d3542", "#11161d"); }
     // pedestal
     if (this.pedestal) {
-      drawRect(this.pedestal, "#343b46");
-      outlineRect(this.pedestal, "#4b5564");
-      ctx.fillStyle = "#aab4c0";
-      ctx.font = "bold 12px system-ui,sans-serif";
+      const pulse = 0.18 + 0.08 * Math.sin(perfNow() * 0.005);
+      ctx.fillStyle = `rgba(255,209,102,${pulse})`;
+      ctx.fillRect(this.pedestal.x - 10, this.pedestal.y - 18, this.pedestal.w + 20, this.pedestal.h + 46);
+      drawRect(this.pedestal, "#4d5662");
+      outlineRect(this.pedestal, "#ffd166");
+      ctx.fillStyle = "#ffd166";
+      ctx.font = "bold 12px system-ui, sans-serif";
       ctx.textAlign="center"; ctx.textBaseline="top";
-      ctx.fillText("PEDESTAL", this.pedestal.x + this.pedestal.w/2, this.pedestal.y + this.pedestal.h + 4);
+      ctx.fillText("HOME", this.pedestal.x + this.pedestal.w/2, this.pedestal.y + this.pedestal.h + 4);
     }
     // castle overlay for clarity
     if (this.castle) {
@@ -1648,6 +1866,7 @@ const WORLD = {
       for (const e of room.enemies) {
         if (e.alive && rectsOverlap(this.player.holding, e)) {
           e.alive = false;
+          spawnSparkles(e.x + e.w / 2, e.y + e.h / 2, "#ff7070", 28);
           showToast("Dragon defeated!");
         }
       }
@@ -1680,6 +1899,8 @@ const WORLD = {
     }
     if (this.player.holding) this.player.holding.draw();
     this.player.draw();
+    drawSparkles();
+    drawQuestBanner(room);
     drawDebugHitboxes(room);
   },
   resetPlayerToStart(dropHeld) {
@@ -3132,7 +3353,8 @@ function buildGauntletLayout(world) {
 const state = {
   paused: false,
   winTimer: 0,
-  hasWonThisRun: false
+  hasWonThisRun: false,
+  sparkles: []
 };
 
 function touchActionPressed(action) {
@@ -3170,6 +3392,7 @@ function loop(ts) {
 
   if (!state.paused) {
     WORLD.update(dt);
+    updateSparkles(dt);
     if (state.winTimer > 0) {
       state.winTimer += dt;
     }
@@ -3184,16 +3407,23 @@ function loop(ts) {
 
   // win banner
   if (state.winTimer > 0) {
-    ctx.fillStyle = "rgba(0,0,0,.55)";
+    ctx.fillStyle = "rgba(0,0,0,.58)";
     ctx.fillRect(0,0,W,H);
-    ctx.fillStyle = "#e8eef8";
-    ctx.font = "bold 42px system-ui, sans-serif";
+    drawSparkles();
+    const glow = 0.35 + 0.25 * Math.sin(perfNow() * 0.006);
+    ctx.fillStyle = `rgba(255,209,102,${glow})`;
+    ctx.fillRect(W / 2 - 210, H / 2 - 86, 420, 156);
+    ctx.fillStyle = "#f4f7fb";
+    ctx.font = "bold 46px system-ui, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText("You Win!", W/2, H/2 - 20);
-    ctx.font = "16px system-ui, sans-serif";
-    ctx.fillStyle = "#aab4c0";
-    ctx.fillText("Press R to play again", W/2, H/2 + 24);
+    ctx.fillText("Quest Complete!", W/2, H/2 - 28);
+    ctx.font = "18px system-ui, sans-serif";
+    ctx.fillStyle = "#dce6f5";
+    ctx.fillText(`${activeKidName} brought the trophy home`, W/2, H/2 + 14);
+    ctx.font = "15px system-ui, sans-serif";
+    ctx.fillStyle = "#b8c4d0";
+    ctx.fillText("Press R to play again", W/2, H/2 + 46);
   }
 
   requestAnimationFrame(loop);
