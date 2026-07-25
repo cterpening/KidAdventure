@@ -26,6 +26,7 @@
     -webkit-touch-callout: none;
     -webkit-user-select: none;
     -webkit-user-drag: none;
+    -webkit-tap-highlight-color: transparent;
     user-select: none;
   }
   body.high-contrast {
@@ -89,6 +90,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    cursor: pointer;
     touch-action: none;
   }
   .touch-btn:active {
@@ -279,18 +281,18 @@
     <h2>Touch Controls</h2>
     <div class="touch-pad" id="touchPad">
       <div></div>
-      <button class="touch-btn" data-dir="up">&#9650;</button>
+      <div class="touch-btn" data-dir="up" role="button" aria-label="Move up">&#9650;</div>
       <div></div>
-      <button class="touch-btn" data-dir="left">&#9664;</button>
+      <div class="touch-btn" data-dir="left" role="button" aria-label="Move left">&#9664;</div>
       <div></div>
-      <button class="touch-btn" data-dir="right">&#9654;</button>
+      <div class="touch-btn" data-dir="right" role="button" aria-label="Move right">&#9654;</div>
       <div></div>
-      <button class="touch-btn" data-dir="down">&#9660;</button>
+      <div class="touch-btn" data-dir="down" role="button" aria-label="Move down">&#9660;</div>
       <div></div>
     </div>
     <div class="touch-actions">
-      <button class="touch-btn" data-action="interact">Use / Pick (E)</button>
-      <button class="touch-btn" data-action="drop">Drop (Q)</button>
+      <div class="touch-btn" data-action="interact" role="button" aria-label="Use or pick up">Use / Pick (E)</div>
+      <div class="touch-btn" data-action="drop" role="button" aria-label="Drop item">Drop (Q)</div>
     </div>
 
     <h2>How to Play</h2>

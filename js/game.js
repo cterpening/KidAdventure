@@ -70,8 +70,9 @@ function preventGameSurfaceBrowserGesture(ev) {
   ev.preventDefault();
 }
 
-document.addEventListener("contextmenu", preventGameSurfaceBrowserGesture);
-document.addEventListener("dragstart", preventGameSurfaceBrowserGesture);
+["contextmenu", "dragstart", "selectstart"].forEach((eventName) => {
+  document.addEventListener(eventName, preventGameSurfaceBrowserGesture, { capture: true });
+});
 
 function normalizeKeyName(key) {
   const normalized = String(key || "").toLowerCase();
@@ -3612,12 +3613,16 @@ function setupTouchControls() {
   const pad = document.getElementById("touchPad");
   if (!pad) return;
   const touchActions = document.querySelector(".touch-actions");
-  const suppressTouchDefault = (ev) => ev.preventDefault();
-  for (const surface of [pad, touchActions, canvas]) {
+  const touchSurfaces = [pad, touchActions, canvas].filter(Boolean);
+  const suppressTouchDefault = (ev) => {
+    ev.preventDefault();
+    ev.stopPropagation();
+  };
+  for (const surface of touchSurfaces) {
     if (!surface) continue;
-    surface.addEventListener("touchstart", suppressTouchDefault, { passive: false });
-    surface.addEventListener("touchmove", suppressTouchDefault, { passive: false });
-    surface.addEventListener("gesturestart", suppressTouchDefault, { passive: false });
+    ["touchstart", "touchmove", "touchend", "touchcancel", "gesturestart", "gesturechange"].forEach((eventName) => {
+      surface.addEventListener(eventName, suppressTouchDefault, { passive: false, capture: true });
+    });
   }
   const dirPointers = new Map();
   const refreshTouchDirs = () => {
@@ -3636,6 +3641,7 @@ function setupTouchControls() {
     const dir = btn.getAttribute("data-dir");
     const start = (ev) => {
       ev.preventDefault();
+      ev.stopPropagation();
       restoreGameFocus();
       if (typeof btn.setPointerCapture === "function") {
         btn.setPointerCapture(ev.pointerId);
@@ -3645,24 +3651,26 @@ function setupTouchControls() {
     };
     const end = (ev) => {
       ev.preventDefault();
+      ev.stopPropagation();
       dirPointers.delete(ev.pointerId);
       refreshTouchDirs();
     };
-    btn.addEventListener("pointerdown", start);
-    btn.addEventListener("pointerup", end);
-    btn.addEventListener("pointercancel", end);
-    btn.addEventListener("lostpointercapture", end);
+    btn.addEventListener("pointerdown", start, { passive: false });
+    btn.addEventListener("pointerup", end, { passive: false });
+    btn.addEventListener("pointercancel", end, { passive: false });
+    btn.addEventListener("lostpointercapture", end, { passive: false });
   });
 
   document.querySelectorAll(".touch-actions .touch-btn").forEach((btn) => {
     const action = btn.dataset.action;
     btn.addEventListener("pointerdown", (ev) => {
       ev.preventDefault();
+      ev.stopPropagation();
       _touchActions[action] = true;
       restoreGameFocus();
-    });
-    btn.addEventListener("pointerup", (ev) => ev.preventDefault());
-    btn.addEventListener("pointercancel", (ev) => ev.preventDefault());
+    }, { passive: false });
+    btn.addEventListener("pointerup", suppressTouchDefault, { passive: false });
+    btn.addEventListener("pointercancel", suppressTouchDefault, { passive: false });
   });
 }
 
