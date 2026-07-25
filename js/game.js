@@ -15,7 +15,10 @@ import {
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d", { alpha: false });
 ctx.imageSmoothingEnabled = false;
-canvas.addEventListener("pointerdown", () => restoreGameFocus());
+canvas.addEventListener("pointerdown", (ev) => {
+  ev.preventDefault();
+  restoreGameFocus();
+});
 
 const keys = new Set();
 const held = (k) => keys.has(k);
@@ -61,6 +64,14 @@ function restoreGameFocus() {
   if (!canvas || document.activeElement === canvas) return;
   canvas.focus({ preventScroll: true });
 }
+
+function preventGameSurfaceBrowserGesture(ev) {
+  if (!ev.target?.closest?.("#game, #touchPad, .touch-actions")) return;
+  ev.preventDefault();
+}
+
+document.addEventListener("contextmenu", preventGameSurfaceBrowserGesture);
+document.addEventListener("dragstart", preventGameSurfaceBrowserGesture);
 
 function normalizeKeyName(key) {
   const normalized = String(key || "").toLowerCase();
@@ -3600,6 +3611,14 @@ document.getElementById("btnDebug").addEventListener("click", ()=>{
 function setupTouchControls() {
   const pad = document.getElementById("touchPad");
   if (!pad) return;
+  const touchActions = document.querySelector(".touch-actions");
+  const suppressTouchDefault = (ev) => ev.preventDefault();
+  for (const surface of [pad, touchActions, canvas]) {
+    if (!surface) continue;
+    surface.addEventListener("touchstart", suppressTouchDefault, { passive: false });
+    surface.addEventListener("touchmove", suppressTouchDefault, { passive: false });
+    surface.addEventListener("gesturestart", suppressTouchDefault, { passive: false });
+  }
   const dirPointers = new Map();
   const refreshTouchDirs = () => {
     touchState.up = false;
@@ -3642,6 +3661,8 @@ function setupTouchControls() {
       _touchActions[action] = true;
       restoreGameFocus();
     });
+    btn.addEventListener("pointerup", (ev) => ev.preventDefault());
+    btn.addEventListener("pointercancel", (ev) => ev.preventDefault());
   });
 }
 
