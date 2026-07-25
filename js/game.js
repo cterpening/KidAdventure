@@ -485,11 +485,11 @@ function drawExitCompass(room) {
   ctx.textBaseline = "middle";
   for (const [dir, x, y, label] of markers) {
     if (!exits[dir]) continue;
-    ctx.fillStyle = "rgba(244,247,251,0.72)";
+    ctx.fillStyle = "rgba(244,247,251,0.36)";
     ctx.beginPath();
-    ctx.arc(x, y, 13, 0, Math.PI * 2);
+    ctx.arc(x, y, 11, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = "#10151b";
+    ctx.fillStyle = "rgba(16,21,27,0.72)";
     ctx.fillText(label, x, y + 0.5);
   }
   ctx.restore();
@@ -758,22 +758,22 @@ function drawQuestBanner(room) {
   const text = currentObjectiveText(room);
   const x = 18;
   const y = 18;
-  const w = Math.min(560, W - 36);
-  const h = 62;
+  const w = Math.min(500, W - 36);
+  const h = 54;
   ctx.save();
-  ctx.fillStyle = "rgba(10,15,21,0.76)";
+  ctx.fillStyle = "rgba(10,15,21,0.44)";
   ctx.fillRect(x, y, w, h);
-  ctx.strokeStyle = "rgba(255,255,255,0.18)";
-  ctx.lineWidth = 2;
+  ctx.strokeStyle = "rgba(255,255,255,0.1)";
+  ctx.lineWidth = 1;
   ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
-  ctx.fillStyle = "#ffd166";
-  ctx.font = "bold 18px system-ui, sans-serif";
+  ctx.fillStyle = "rgba(255,209,102,0.86)";
+  ctx.font = "bold 16px system-ui, sans-serif";
   ctx.textAlign = "left";
   ctx.textBaseline = "top";
-  ctx.fillText(room.name, x + 16, y + 10);
-  ctx.fillStyle = "#f4f7fb";
-  ctx.font = "14px system-ui, sans-serif";
-  ctx.fillText(text, x + 16, y + 36);
+  ctx.fillText(room.name, x + 14, y + 8);
+  ctx.fillStyle = "rgba(244,247,251,0.82)";
+  ctx.font = "13px system-ui, sans-serif";
+  ctx.fillText(text, x + 14, y + 31);
   ctx.restore();
 }
 
