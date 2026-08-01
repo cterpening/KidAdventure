@@ -10,6 +10,7 @@ KidAdventure is a family-photo remake of Atari 2600 Adventure. The goal is a rec
 
 ## How to Play
 - Move with `WASD`, arrow keys, or the touch D-pad.
+- On Xbox or another standard controller: use the left stick/D-pad to move, `A` to use/pick up, `B` to drop, `Menu` to pause, and `Y` to restart.
 - Press `E` or `Use / Pick` to grab an item.
 - Press `Q` or `Drop` to set the held item down.
 - Use `New Run` when you want a fresh seeded remix layout without losing deterministic resets for the current run.

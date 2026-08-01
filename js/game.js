@@ -23,6 +23,9 @@ canvas.addEventListener("pointerdown", (ev) => {
 const keys = new Set();
 const held = (k) => keys.has(k);
 const _pressed = new Set();
+const gamepadHeldActions = new Set();
+const gamepadPressedActions = new Set();
+let gamepadButtons = [];
 const _touchActions = { interact: false, drop: false };
 const ACTION_LABELS = {
   moveUp: "Move Up",
@@ -89,11 +92,16 @@ function keyLabel(key) {
 }
 
 function actionHeld(action) {
+  if (gamepadHeldActions.has(action)) return true;
   const bindings = keyBindings[action] || [];
   return bindings.some((key) => held(key));
 }
 
 function actionPressed(action) {
+  if (gamepadPressedActions.has(action)) {
+    gamepadPressedActions.delete(action);
+    return true;
+  }
   const bindings = keyBindings[action] || [];
   for (const key of bindings) {
     if (_pressed.has(key)) {
@@ -385,6 +393,33 @@ function drawWallRect(r, color="#2a3340", stroke="#11161d") {
   ctx.strokeStyle = stroke;
   ctx.lineWidth = 2;
   ctx.strokeRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2);
+}
+
+function pollGamepad() {
+  gamepadHeldActions.clear();
+  const pad = Array.from(navigator.getGamepads ? navigator.getGamepads() : []).find(Boolean);
+  if (!pad) {
+    gamepadButtons = [];
+    return;
+  }
+  const buttons = pad.buttons.map((button) => button.pressed || button.value > 0.5);
+  const pressed = (index) => Boolean(buttons[index] && !gamepadButtons[index]);
+  const heldButton = (index) => Boolean(buttons[index]);
+  const left = pad.axes[0] < -0.35 || heldButton(14);
+  const right = pad.axes[0] > 0.35 || heldButton(15);
+  const up = pad.axes[1] < -0.35 || heldButton(12);
+  const down = pad.axes[1] > 0.35 || heldButton(13);
+  if (up) gamepadHeldActions.add("moveUp");
+  if (down) gamepadHeldActions.add("moveDown");
+  if (left) gamepadHeldActions.add("moveLeft");
+  if (right) gamepadHeldActions.add("moveRight");
+  if (heldButton(0)) gamepadHeldActions.add("interact");
+  if (heldButton(1)) gamepadHeldActions.add("drop");
+  if (pressed(0)) gamepadPressedActions.add("interact");
+  if (pressed(1)) gamepadPressedActions.add("drop");
+  if (pressed(9)) gamepadPressedActions.add("pause");
+  if (pressed(3)) gamepadPressedActions.add("reset");
+  gamepadButtons = buttons;
 }
 function hexToRgb(hex) {
   const value = String(hex || "").replace("#", "");
@@ -3393,6 +3428,8 @@ function perfNow(){ return performance.now(); }
 function loop(ts) {
   const dt = Math.min(0.033, (ts - last) / 1000);
   last = ts;
+
+  pollGamepad();
 
   // toggles
   if (actionPressed("pause")) { state.paused = !state.paused; showToast(state.paused ? "Paused" : "Resumed"); }
