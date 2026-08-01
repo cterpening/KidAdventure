@@ -1,5 +1,7 @@
 # KidAdventure
 
+Play it online: **https://cterpening.github.io/KidAdventure/**
+
 KidAdventure is a family-photo remake of Atari 2600 Adventure. The goal is a recognizable Adventure-style quest first: carry one item at a time, dodge dragons, unlock castles with keys, survive the bat, and bring the trophy back to the pedestal. The project adds polish through better room landmarks, family-specific player art, and an optional remix mode instead of rewriting the core game loop.
 
 ## Game Modes
